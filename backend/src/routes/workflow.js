@@ -6,11 +6,13 @@ import {
   generateDPEReport,
   classifySignalement,
   addWorkflowNote,
-  getMyWorkflows
+  getMyWorkflows,
+  escalateSignalement
 } from '../controllers/workflowController.js';
 import { protect } from '../middleware/auth.js';
 import { requireLevel2, checkWorkflowAssignment } from '../middleware/roles.js';
 import { logAudit } from '../middleware/auditLog.js';
+import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -28,9 +30,11 @@ router.get('/:signalementId', logAudit('VIEW_SIGNALEMENT'), getWorkflow);
 router.post('/', logAudit('CREATE_WORKFLOW', 'Workflow'), createWorkflow);
 
 // Update workflow stage (assignment checked)
-router.put('/:workflowId/stage', 
+router.put(
+  '/:workflowId/stage',
   checkWorkflowAssignment,
-  logAudit('UPDATE_WORKFLOW', 'Workflow'), 
+  upload.array('attachments', 5),
+  logAudit('UPDATE_WORKFLOW', 'Workflow'),
   updateWorkflowStage
 );
 
@@ -48,10 +52,19 @@ router.put('/:workflowId/classify',
   classifySignalement
 );
 
-// Add note (assignment checked)
-router.post('/:workflowId/notes', 
+// Escalate signalement (assignment checked)
+router.put(
+  '/:workflowId/escalate',
   checkWorkflowAssignment,
-  logAudit('UPDATE_WORKFLOW', 'Workflow'), 
+  logAudit('ESCALATE_SIGNALEMENT', 'Workflow'),
+  escalateSignalement
+);
+
+// Add note (assignment checked)
+router.post(
+  '/:workflowId/notes',
+  checkWorkflowAssignment,
+  logAudit('UPDATE_WORKFLOW', 'Workflow'),
   addWorkflowNote
 );
 

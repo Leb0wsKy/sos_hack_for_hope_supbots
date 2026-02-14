@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 const signalementSchema = new mongoose.Schema({
   // Basic Information
   title: {
-    type: String,
-    required: true
+    type: String
   },
   description: {
     type: String,
@@ -14,6 +13,7 @@ const signalementSchema = new mongoose.Schema({
   // Anonymous reporting
   isAnonymous: {
     type: Boolean,
+    required: true,
     default: false
   },
   createdBy: {
@@ -25,18 +25,23 @@ const signalementSchema = new mongoose.Schema({
   // Location & Village
   village: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Village',
-    required: true
+    ref: 'Village'
   },
   program: {
-    type: String,
-    required: true
+    type: String
+  },
+
+  // People involved (optional)
+  childName: {
+    type: String
+  },
+  abuserName: {
+    type: String
   },
   
   // Incident Details
   incidentType: {
     type: String,
-    required: true,
     enum: [
       'SANTE',           // Health
       'VIOLENCE_PHYSIQUE',
@@ -53,7 +58,6 @@ const signalementSchema = new mongoose.Schema({
   // Urgency Level
   urgencyLevel: {
     type: String,
-    required: true,
     enum: ['FAIBLE', 'MOYEN', 'ELEVE', 'CRITIQUE'],
     default: 'MOYEN'
   },
@@ -114,6 +118,25 @@ const signalementSchema = new mongoose.Schema({
     ref: 'User'
   },
   assignedAt: {
+    type: Date
+  },
+
+  // Escalation
+  escalationStatus: {
+    type: String,
+    enum: ['NONE', 'ESCALATED'],
+    default: 'NONE'
+  },
+  escalatedTo: {
+    type: String,
+    enum: ['VILLAGE_DIRECTOR', 'NATIONAL_OFFICE', null],
+    default: null
+  },
+  escalatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  escalatedAt: {
     type: Date
   },
   

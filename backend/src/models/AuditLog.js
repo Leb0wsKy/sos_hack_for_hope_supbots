@@ -18,6 +18,7 @@ const auditLogSchema = new mongoose.Schema({
       'UPDATE_SIGNALEMENT',
       'DELETE_SIGNALEMENT',
       'CLASSIFY_SIGNALEMENT',
+      'ESCALATE_SIGNALEMENT',
       'CLOSE_SIGNALEMENT',
       'VIEW_SIGNALEMENT',
       'CREATE_WORKFLOW',

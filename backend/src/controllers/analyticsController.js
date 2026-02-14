@@ -2,6 +2,14 @@ import Signalement from '../models/Signalement.js';
 import Village from '../models/Village.js';
 import User from '../models/User.js';
 
+const enforceVillageAnalyticsScope = (req, filter = {}) => {
+  if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    return { ...filter, village: req.user.village };
+  }
+
+  return filter;
+};
+
 // Global analytics for Level 3
 export const getAnalytics = async (req, res) => {
   try {
@@ -15,6 +23,8 @@ export const getAnalytics = async (req, res) => {
       if (endDate) filter.createdAt.$lte = new Date(endDate);
     }
     if (village) filter.village = village;
+
+    filter = enforceVillageAnalyticsScope(req, filter);
 
     // Overall statistics
     const total = await Signalement.countDocuments(filter);
@@ -60,8 +70,14 @@ export const getAnalytics = async (req, res) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
+    const timelineMatch = { ...filter };
+    timelineMatch.createdAt = { $gte: thirtyDaysAgo };
+    if (filter.createdAt?.$lte) {
+      timelineMatch.createdAt.$lte = filter.createdAt.$lte;
+    }
+
     const timeline = await Signalement.aggregate([
-      { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+      { $match: timelineMatch },
       { $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
         count: { $sum: 1 }
@@ -70,10 +86,15 @@ export const getAnalytics = async (req, res) => {
     ]);
 
     // Recent high-priority alerts
-    const recentAlerts = await Signalement.find({
+    const recentAlertFilter = {
       urgencyLevel: { $in: ['ELEVE', 'CRITIQUE'] },
       status: { $in: ['EN_ATTENTE', 'EN_COURS'] }
-    })
+    };
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      recentAlertFilter.village = req.user.village;
+    }
+
+    const recentAlerts = await Signalement.find(recentAlertFilter)
       .populate('village', 'name location')
       .populate('createdBy', 'name')
       .sort({ createdAt: -1 })
@@ -116,7 +137,11 @@ export const getAnalytics = async (req, res) => {
 export const getHeatmapData = async (req, res) => {
   try {
     // Get all villages with their coordinates and signalement counts
-    const villages = await Village.find({ isActive: true });
+    const villageFilter = { isActive: true };
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      villageFilter._id = req.user.village;
+    }
+    const villages = await Village.find(villageFilter);
 
     const heatmapData = await Promise.all(
       villages.map(async (village) => {
@@ -172,7 +197,12 @@ export const getHeatmapData = async (req, res) => {
 // Village ratings for Level 3
 export const getVillageRatings = async (req, res) => {
   try {
-    const villages = await Village.find({ isActive: true })
+    const villageFilter = { isActive: true };
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      villageFilter._id = req.user.village;
+    }
+
+    const villages = await Village.find(villageFilter)
       .populate('director', 'name email')
       .sort({ ratingScore: -1 });
 
@@ -232,6 +262,8 @@ export const exportData = async (req, res) => {
       if (endDate) filter.createdAt.$lte = new Date(endDate);
     }
 
+    filter = enforceVillageAnalyticsScope(req, filter);
+
     const signalements = await Signalement.find(filter)
       .populate('village', 'name location region')
       .populate('createdBy', 'name email roleDetails')
@@ -239,11 +271,18 @@ export const exportData = async (req, res) => {
       .populate('classifiedBy', 'name')
       .lean();
 
+    const masked = signalements.map((signalement) => {
+      if (signalement.isAnonymous) {
+        return { ...signalement, createdBy: null };
+      }
+      return signalement;
+    });
+
     // Return as JSON (can be extended to CSV/Excel)
     res.json({
       exportDate: new Date(),
       totalRecords: signalements.length,
-      data: signalements
+      data: masked
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

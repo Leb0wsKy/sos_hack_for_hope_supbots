@@ -1,8 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Server as SocketIOServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import connectDB from './config/db.js';
 import authRoutes from './routes/auth.js';
 import signalementRoutes from './routes/signalement.js';
@@ -10,6 +13,7 @@ import analyticsRoutes from './routes/analytics.js';
 import workflowRoutes from './routes/workflow.js';
 import villageRoutes from './routes/village.js';
 import adminRoutes from './routes/admin.js';
+import { setSocketServer } from './services/socket.js';
 
 dotenv.config();
 
@@ -18,6 +22,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
 
 // Middleware
 app.use(cors());
@@ -63,7 +68,46 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: '*'
+  }
+});
+
+setSocketServer(io);
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) {
+    return next(new Error('Unauthorized'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = decoded;
+    return next();
+  } catch (error) {
+    return next(new Error('Unauthorized'));
+  }
+});
+
+io.on('connection', (socket) => {
+  const role = socket.user?.role;
+  const roleDetails = socket.user?.roleDetails;
+  const userId = socket.user?.id;
+  const villageId = socket.user?.village?._id || socket.user?.village;
+
+  if (userId) socket.join(`user:${userId}`);
+  if (role) socket.join(`role:${role}`);
+  if (villageId) socket.join(`village:${villageId}`);
+  if (role && villageId) socket.join(`role:${role}:village:${villageId}`);
+  if (roleDetails) socket.join(`roleDetails:${roleDetails}`);
+  if (roleDetails && villageId) socket.join(`roleDetails:${roleDetails}:village:${villageId}`);
+
+  socket.emit('connected', { status: 'ok' });
+});
+
+server.listen(PORT, () => {
   console.log(`✓ Server running on port ${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✓ API Base URL: http://localhost:${PORT}`);

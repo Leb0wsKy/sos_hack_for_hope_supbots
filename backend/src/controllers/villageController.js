@@ -4,7 +4,12 @@ import Signalement from '../models/Signalement.js';
 // Get all villages
 export const getAllVillages = async (req, res) => {
   try {
-    const villages = await Village.find({ isActive: true })
+    const filter = { isActive: true };
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      filter._id = req.user.village;
+    }
+
+    const villages = await Village.find(filter)
       .populate('director', 'name email')
       .sort({ name: 1 });
 
@@ -22,6 +27,12 @@ export const getVillageById = async (req, res) => {
 
     if (!village) {
       return res.status(404).json({ message: 'Village not found' });
+    }
+
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      if (String(village._id) !== String(req.user.village)) {
+        return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+      }
     }
 
     res.json(village);
@@ -79,6 +90,12 @@ export const getVillageStatistics = async (req, res) => {
     const village = await Village.findById(id);
     if (!village) {
       return res.status(404).json({ message: 'Village not found' });
+    }
+
+    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      if (String(village._id) !== String(req.user.village)) {
+        return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+      }
     }
 
     // Get signalement statistics

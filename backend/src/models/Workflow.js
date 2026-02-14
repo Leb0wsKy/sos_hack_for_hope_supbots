@@ -22,7 +22,18 @@ const workflowSchema = new mongoose.Schema({
     initialReport: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
-      completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+      completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     dpeReport: {
       completed: { type: Boolean, default: false },
@@ -30,37 +41,97 @@ const workflowSchema = new mongoose.Schema({
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       content: String,
       aiGenerated: { type: Boolean, default: false },
-      edited: { type: Boolean, default: false }
+      edited: { type: Boolean, default: false },
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     evaluation: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      content: String
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     actionPlan: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      content: String
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     followUpReport: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      content: String
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     finalReport: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      content: String
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     },
     closureNotice: {
       completed: { type: Boolean, default: false },
       completedAt: Date,
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      content: String
+      content: String,
+      attachments: [{
+        filename: String,
+        originalName: String,
+        mimeType: String,
+        size: Number,
+        path: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      dueAt: Date,
+      isOverdue: { type: Boolean, default: false }
     }
   },
   currentStage: {

@@ -3,9 +3,48 @@ import Village from '../models/Village.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { emitEvent } from '../services/socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const maskAnonymousSignalement = (signalement) => {
+  if (!signalement) return signalement;
+  const data = signalement.toObject ? signalement.toObject() : { ...signalement };
+
+  if (data.isAnonymous) {
+    data.createdBy = null;
+  }
+
+  return data;
+};
+
+const enforceVillageScope = (req, signalement) => {
+  const role = req.user.role;
+  const roleDetails = req.user.roleDetails;
+
+  if (role === 'LEVEL4') return null;
+  if (role === 'LEVEL3' && roleDetails === 'NATIONAL_OFFICE') return null;
+
+  const signalementVillageId = String(signalement.village?._id || signalement.village);
+  const userVillageId = String(req.user.village || '');
+
+  if (role === 'LEVEL3' && roleDetails === 'VILLAGE_DIRECTOR') {
+    return signalementVillageId === userVillageId ? null : 'Village scope violation';
+  }
+
+  if (role === 'LEVEL1') {
+    return signalementVillageId === userVillageId ? null : 'Village scope violation';
+  }
+
+  if (role === 'LEVEL2') {
+    const assignedTo = String(signalement.assignedTo?._id || signalement.assignedTo || '');
+    if (assignedTo === String(req.user.id)) return null;
+    return signalementVillageId === userVillageId ? null : 'Village scope violation';
+  }
+
+  return null;
+};
 
 // Create new signalement with file uploads
 export const createSignalement = async (req, res) => {
@@ -17,8 +56,18 @@ export const createSignalement = async (req, res) => {
       program,
       incidentType,
       urgencyLevel,
-      isAnonymous 
+      isAnonymous,
+      childName,
+      abuserName
     } = req.body;
+
+    if (typeof isAnonymous === 'undefined') {
+      return res.status(400).json({ message: 'isAnonymous is required' });
+    }
+
+    if (!description) {
+      return res.status(400).json({ message: 'description is required' });
+    }
 
     // Process uploaded files
     const attachments = req.files ? req.files.map(file => ({
@@ -32,14 +81,18 @@ export const createSignalement = async (req, res) => {
     // AI detection placeholder - calculate suspicion score
     const aiSuspicionScore = calculateAISuspicionScore(description, incidentType);
 
+    const resolvedVillage = village || req.user.village || undefined;
+
     const signalement = new Signalement({
       title,
       description,
-      village,
+      village: resolvedVillage,
       program,
       incidentType,
       urgencyLevel,
       isAnonymous: isAnonymous === 'true' || isAnonymous === true,
+      childName,
+      abuserName,
       createdBy: req.user.id,
       attachments,
       aiSuspicionScore,
@@ -53,15 +106,25 @@ export const createSignalement = async (req, res) => {
     await signalement.save();
 
     // Update village statistics
-    await Village.findByIdAndUpdate(village, {
-      $inc: { totalSignalements: 1 }
-    });
+    if (resolvedVillage) {
+      await Village.findByIdAndUpdate(resolvedVillage, {
+        $inc: { totalSignalements: 1 }
+      });
+    }
 
     // Populate before sending
-    await signalement.populate('village', 'name location');
+    if (resolvedVillage) {
+      await signalement.populate('village', 'name location');
+    }
     await signalement.populate('createdBy', 'name email role');
 
-    res.status(201).json(signalement);
+    emitEvent('signalement.created', {
+      id: signalement._id,
+      village: signalement.village?._id || signalement.village,
+      urgencyLevel: signalement.urgencyLevel || null
+    });
+
+    res.status(201).json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -92,7 +155,19 @@ export const getSignalements = async (req, res) => {
     const { status, village, urgencyLevel, incidentType, myVillage } = req.query;
     
     let filter = {};
-    
+    if (status) filter.status = status;
+    if (village) filter.village = village;
+    if (urgencyLevel) filter.urgencyLevel = urgencyLevel;
+    if (incidentType) filter.incidentType = incidentType;
+
+    if (req.user.role === 'LEVEL2' && village) {
+      if (!req.accessibleVillages || !req.accessibleVillages.includes(village)) {
+        return res.status(403).json({
+          message: 'Access denied. You can only access signalements from your assigned villages.'
+        });
+      }
+    }
+
     // Role-based filtering with village scope
     if (req.user.role === 'LEVEL1') {
       // Level 1 only sees their own village's reports
@@ -115,23 +190,10 @@ export const getSignalements = async (req, res) => {
       if (myVillage === 'true') {
         filter.village = req.user.village;
       }
+    } else if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      filter.village = req.user.village;
     }
-    // Level 3/4 sees all (no filter)
-    
-    if (status) filter.status = status;
-    if (village) {
-      // Level 2 can only filter within their accessible villages
-      if (req.user.role === 'LEVEL2') {
-        if (!req.accessibleVillages || !req.accessibleVillages.includes(village)) {
-          return res.status(403).json({ 
-            message: 'Access denied. You can only access signalements from your assigned villages.' 
-          });
-        }
-      }
-      filter.village = village;
-    }
-    if (urgencyLevel) filter.urgencyLevel = urgencyLevel;
-    if (incidentType) filter.incidentType = incidentType;
+    // Level 3 (national) and Level 4 see all
     
     const signalements = await Signalement.find(filter)
       .populate('createdBy', 'name email role roleDetails')
@@ -139,8 +201,10 @@ export const getSignalements = async (req, res) => {
       .populate('assignedTo', 'name email')
       .populate('classifiedBy', 'name')
       .sort({ createdAt: -1 });
-    
-    res.json(signalements);
+
+    const masked = signalements.map(maskAnonymousSignalement);
+
+    res.json(masked);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -160,7 +224,12 @@ export const getSignalementById = async (req, res) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
-    res.json(signalement);
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
+    res.json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -170,7 +239,8 @@ export const getSignalementById = async (req, res) => {
 export const updateSignalement = async (req, res) => {
   try {
     const { id } = req.params;
-    
+    const signalement = await Signalement.findById(id).populate('village createdBy assignedTo');
+
     // Level 3/4 cannot use general update - only closure/archive
     if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
       return res.status(403).json({ 
@@ -178,18 +248,19 @@ export const updateSignalement = async (req, res) => {
       });
     }
 
-    // Level 2 must be assigned (checked by middleware)
-    const signalement = await Signalement.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true }
-    ).populate('village createdBy assignedTo');
-
     if (!signalement) {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
-    res.json(signalement);
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
+    Object.assign(signalement, req.body);
+    await signalement.save();
+
+    res.json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -206,6 +277,11 @@ export const closeSignalement = async (req, res) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
     signalement.status = 'CLOTURE';
     signalement.closedBy = req.user.id;
     signalement.closedAt = new Date();
@@ -213,7 +289,13 @@ export const closeSignalement = async (req, res) => {
 
     await signalement.save();
 
-    res.json(signalement);
+    emitEvent('signalement.closed', {
+      id: signalement._id,
+      village: signalement.village,
+      closedBy: req.user.id
+    });
+
+    res.json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -229,6 +311,11 @@ export const archiveSignalement = async (req, res) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
     if (signalement.status !== 'CLOTURE') {
       return res.status(400).json({ message: 'Only closed signalements can be archived' });
     }
@@ -239,7 +326,13 @@ export const archiveSignalement = async (req, res) => {
 
     await signalement.save();
 
-    res.json(signalement);
+    emitEvent('signalement.archived', {
+      id: signalement._id,
+      village: signalement.village,
+      archivedBy: req.user.id
+    });
+
+    res.json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -249,16 +342,25 @@ export const archiveSignalement = async (req, res) => {
 export const deleteSignalement = async (req, res) => {
   try {
     const { id } = req.params;
-    const signalement = await Signalement.findByIdAndDelete(id);
+    const signalement = await Signalement.findById(id);
 
     if (!signalement) {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
+    await Signalement.findByIdAndDelete(id);
+
     // Update village statistics
-    await Village.findByIdAndUpdate(signalement.village, {
-      $inc: { totalSignalements: -1 }
-    });
+    if (signalement.village) {
+      await Village.findByIdAndUpdate(signalement.village, {
+        $inc: { totalSignalements: -1 }
+      });
+    }
 
     res.json({ message: 'Signalement deleted successfully' });
   } catch (error) {
@@ -277,13 +379,24 @@ export const assignSignalement = async (req, res) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+
     signalement.assignedTo = userId;
     signalement.assignedAt = new Date();
     signalement.status = 'EN_COURS';
 
     await signalement.save();
 
-    res.json(signalement);
+    emitEvent('signalement.assigned', {
+      id: signalement._id,
+      village: signalement.village,
+      assignedTo: userId
+    });
+
+    res.json(maskAnonymousSignalement(signalement));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

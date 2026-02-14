@@ -1,5 +1,6 @@
 import Workflow from '../models/Workflow.js';
 import Signalement from '../models/Signalement.js';
+import { emitEvent } from '../services/socket.js';
 
 // Create workflow for a signalement
 export const createWorkflow = async (req, res) => {
@@ -30,6 +31,13 @@ export const createWorkflow = async (req, res) => {
     signalement.assignedAt = new Date();
     signalement.status = 'EN_COURS';
     await signalement.save();
+
+    emitEvent('workflow.created', {
+      id: workflow._id,
+      signalement: signalement._id,
+      assignedTo: req.user.id,
+      village: signalement.village
+    });
 
     res.status(201).json(workflow);
   } catch (error) {
@@ -75,7 +83,7 @@ export const getWorkflow = async (req, res) => {
 export const updateWorkflowStage = async (req, res) => {
   try {
     const { workflowId } = req.params;
-    const { stage, content } = req.body;
+    const { stage, content, dueAt } = req.body;
 
     // Use workflow from middleware if available
     const workflow = req.workflow || await Workflow.findById(workflowId);
@@ -103,6 +111,28 @@ export const updateWorkflowStage = async (req, res) => {
     workflow.stages[stage].completedBy = req.user.id;
     workflow.stages[stage].content = content;
 
+    if (dueAt) {
+      workflow.stages[stage].dueAt = new Date(dueAt);
+    }
+
+    if (req.files?.length) {
+      const attachments = req.files.map((file) => ({
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        path: file.path
+      }));
+
+      const existing = workflow.stages[stage].attachments || [];
+      workflow.stages[stage].attachments = existing.concat(attachments);
+    }
+
+    if (workflow.stages[stage].dueAt) {
+      workflow.stages[stage].isOverdue =
+        workflow.stages[stage].completedAt > workflow.stages[stage].dueAt;
+    }
+
     // Update current stage
     const stageMap = {
       'initialReport': 'INITIAL',
@@ -116,6 +146,15 @@ export const updateWorkflowStage = async (req, res) => {
     workflow.currentStage = stageMap[stage];
 
     await workflow.save();
+
+    const signalement = await Signalement.findById(workflow.signalement).select('village');
+
+    emitEvent('workflow.stageCompleted', {
+      id: workflow._id,
+      signalement: workflow.signalement,
+      stage,
+      village: signalement?.village
+    });
 
     res.json(workflow);
   } catch (error) {
@@ -160,6 +199,12 @@ Note: Ce rapport a été généré automatiquement et doit être révisé et com
     workflow.stages.dpeReport.aiGenerated = true;
     await workflow.save();
 
+    emitEvent('workflow.dpeGenerated', {
+      id: workflow._id,
+      signalement: workflow.signalement?._id || workflow.signalement,
+      village: workflow.signalement?.village
+    });
+
     res.json({ 
       message: 'DPE report generated',
       content: aiGeneratedReport,
@@ -201,6 +246,12 @@ export const classifySignalement = async (req, res) => {
 
     await signalement.save();
 
+    emitEvent('signalement.classified', {
+      id: signalement._id,
+      classification,
+      village: signalement.village
+    });
+
     res.json({ workflow, signalement });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -227,6 +278,41 @@ export const addWorkflowNote = async (req, res) => {
     await workflow.save();
 
     res.json(workflow);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Escalate signalement to Level 3
+export const escalateSignalement = async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { escalatedTo } = req.body;
+
+    const validTargets = ['VILLAGE_DIRECTOR', 'NATIONAL_OFFICE'];
+    if (!validTargets.includes(escalatedTo)) {
+      return res.status(400).json({ message: 'Invalid escalatedTo value' });
+    }
+
+    const workflow = await Workflow.findById(workflowId).populate('signalement');
+    if (!workflow) {
+      return res.status(404).json({ message: 'Workflow not found' });
+    }
+
+    const signalement = await Signalement.findById(workflow.signalement._id);
+    signalement.escalationStatus = 'ESCALATED';
+    signalement.escalatedTo = escalatedTo;
+    signalement.escalatedBy = req.user.id;
+    signalement.escalatedAt = new Date();
+    await signalement.save();
+
+    emitEvent('signalement.escalated', {
+      id: signalement._id,
+      escalatedTo,
+      village: signalement.village
+    });
+
+    res.json({ workflow, signalement });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
