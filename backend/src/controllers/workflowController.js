@@ -68,7 +68,15 @@ export const updateWorkflowStage = async (req, res) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    const validStages = ['dpeReport', 'evaluation', 'actionPlan', 'followUpReport', 'finalReport', 'closureNotice'];
+    const validStages = [
+      'initialReport',
+      'dpeReport',
+      'evaluation',
+      'actionPlan',
+      'followUpReport',
+      'finalReport',
+      'closureNotice'
+    ];
     
     if (!validStages.includes(stage)) {
       return res.status(400).json({ message: 'Invalid stage' });
@@ -82,6 +90,7 @@ export const updateWorkflowStage = async (req, res) => {
 
     // Update current stage
     const stageMap = {
+      'initialReport': 'INITIAL',
       'dpeReport': 'DPE',
       'evaluation': 'EVALUATION',
       'actionPlan': 'ACTION_PLAN',

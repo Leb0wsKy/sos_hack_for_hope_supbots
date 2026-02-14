@@ -17,6 +17,7 @@ export const checkRole = (allowedRoles) => {
 };
 
 // Helper middleware
-export const requireLevel1 = checkRole(['LEVEL1', 'LEVEL2', 'LEVEL3']);
-export const requireLevel2 = checkRole(['LEVEL2', 'LEVEL3']);
-export const requireLevel3 = checkRole(['LEVEL3']);
+export const requireLevel1 = checkRole(['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4']);
+export const requireLevel2 = checkRole(['LEVEL2', 'LEVEL3', 'LEVEL4']);
+export const requireLevel3 = checkRole(['LEVEL3', 'LEVEL4']);
+export const requireLevel4 = checkRole(['LEVEL4']);

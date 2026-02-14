@@ -36,9 +36,10 @@ const addUser = async () => {
     console.log('  1. LEVEL1 (Terrain User - SOS Mother, Educator, Field Staff)');
     console.log('  2. LEVEL2 (Psychologist, Social Worker)');
     console.log('  3. LEVEL3 (Village Director, National Office)');
-    const roleChoice = await question('Select role (1-3): ');
+    console.log('  4. LEVEL4 (Super Admin)');
+    const roleChoice = await question('Select role (1-4): ');
     
-    const roleMap = { '1': 'LEVEL1', '2': 'LEVEL2', '3': 'LEVEL3' };
+    const roleMap = { '1': 'LEVEL1', '2': 'LEVEL2', '3': 'LEVEL3', '4': 'LEVEL4' };
     const role = roleMap[roleChoice] || 'LEVEL1';
 
     console.log('\nRole Details:');
@@ -49,21 +50,27 @@ const addUser = async () => {
     } else if (role === 'LEVEL2') {
       console.log('  1. PSYCHOLOGIST');
       console.log('  2. SOCIAL_WORKER');
-    } else {
+    } else if (role === 'LEVEL3') {
       console.log('  1. VILLAGE_DIRECTOR');
       console.log('  2. NATIONAL_OFFICE');
+    } else {
+      console.log('  1. SUPER_ADMIN');
     }
     const roleDetailChoice = await question('Select role details (1-2): ');
     
     const roleDetailsMap = {
       'LEVEL1': { '1': 'SOS_MOTHER', '2': 'EDUCATOR', '3': 'FIELD_STAFF' },
       'LEVEL2': { '1': 'PSYCHOLOGIST', '2': 'SOCIAL_WORKER' },
-      'LEVEL3': { '1': 'VILLAGE_DIRECTOR', '2': 'NATIONAL_OFFICE' }
+      'LEVEL3': { '1': 'VILLAGE_DIRECTOR', '2': 'NATIONAL_OFFICE' },
+      'LEVEL4': { '1': 'SUPER_ADMIN' }
     };
     const roleDetails = roleDetailsMap[role][roleDetailChoice];
 
-    const villageChoice = await question(`\nSelect village (1-${villages.length}): `);
-    const village = villages[parseInt(villageChoice) - 1]?._id;
+    let village;
+    if (role !== 'LEVEL4') {
+      const villageChoice = await question(`\nSelect village (1-${villages.length}): `);
+      village = villages[parseInt(villageChoice) - 1]?._id;
+    }
 
     const phone = await question('Phone (optional): ');
 
@@ -81,7 +88,7 @@ const addUser = async () => {
       password,
       role,
       roleDetails,
-      village,
+      village: village || undefined,
       phone: phone || undefined,
       isActive: true
     });
@@ -94,7 +101,10 @@ const addUser = async () => {
     console.log(`Email: ${email}`);
     console.log(`Role: ${role}`);
     console.log(`Role Details: ${roleDetails}`);
-    console.log(`Village: ${villages[parseInt(villageChoice) - 1]?.name}`);
+    if (village) {
+      const villageName = villages.find(v => String(v._id) === String(village))?.name;
+      console.log(`Village: ${villageName}`);
+    }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     process.exit(0);
