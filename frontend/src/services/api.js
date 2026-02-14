@@ -35,6 +35,8 @@ api.interceptors.response.use(
 export const login = (email, password) =>
   api.post('/auth/login', { email, password });
 
+export const getProfile = () => api.get('/auth/profile');
+
 /* ── Villages ── */
 export const getVillages = () => api.get('/villages');
 export const getVillageById = (id) => api.get(`/villages/${id}`);

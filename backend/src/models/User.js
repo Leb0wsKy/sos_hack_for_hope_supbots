@@ -47,6 +47,11 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String
   },
+  // Number of children in charge (for SOS Mothers, Educators, etc.)
+  childrenCount: {
+    type: Number,
+    default: 0
+  },
   isActive: {
     type: Boolean,
     default: true

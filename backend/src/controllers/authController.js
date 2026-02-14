@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import AuditLog from '../models/AuditLog.js';
+import Signalement from '../models/Signalement.js';
 
 const loginAttempts = new Map();
 const MAX_ATTEMPTS = 5;
@@ -75,7 +76,8 @@ export const login = async (req, res) => {
         email,
         role: user.role,
         roleDetails: user.roleDetails,
-        village: user.village
+        village: user.village,
+        childrenCount: user.childrenCount || 0
       } 
     });
 
@@ -88,6 +90,48 @@ export const login = async (req, res) => {
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.get('user-agent')
     }).catch((err) => console.error('Audit log error:', err));
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get current user profile with their signalements
+export const getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-password')
+      .populate('village', 'name location programs');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get user's signalements (only for level 1 users - created by them)
+    let signalements = [];
+    if (user.role === 'LEVEL1') {
+      signalements = await Signalement.find({ 
+        createdBy: user._id 
+      })
+        .select('title description incidentType urgencyLevel status createdAt')
+        .populate('village', 'name')
+        .sort({ createdAt: -1 })
+        .limit(10); // Get last 10 signalements
+    }
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        roleDetails: user.roleDetails,
+        village: user.village,
+        childrenCount: user.childrenCount || 0,
+        phone: user.phone,
+        lastLogin: user.lastLogin
+      },
+      signalements
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
