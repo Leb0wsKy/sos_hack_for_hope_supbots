@@ -1,0 +1,4 @@
+MONGODB_URI=mongodb+srv://sos:sossupbots@cluster0.qyuityc.mongodb.net/?appName=Cluster0
+JWT_SECRET=change_me_jwt_secret
+CORS_ORIGIN=http://localhost:3000
+FIELD_ENCRYPTION_KEY=base64_32_bytes_key_here

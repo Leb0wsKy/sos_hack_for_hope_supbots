@@ -272,10 +272,18 @@ export const exportData = async (req, res) => {
       .lean();
 
     const masked = signalements.map((signalement) => {
-      if (signalement.isAnonymous) {
-        return { ...signalement, createdBy: null };
+      const record = { ...signalement };
+
+      // Always redact PII from exports
+      delete record.childName;
+      delete record.abuserName;
+      delete record.description;
+      delete record.attachments;
+
+      if (record.isAnonymous) {
+        record.createdBy = null;
       }
-      return signalement;
+      return record;
     });
 
     // Return as JSON (can be extended to CSV/Excel)

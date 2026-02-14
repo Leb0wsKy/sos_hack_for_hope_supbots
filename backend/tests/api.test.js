@@ -186,6 +186,16 @@ describe('Hack For Hope API full tests', () => {
     expect(response.status).toBe(200);
   });
 
+  it('blocks Level 2 from downloading unassigned attachments', async () => {
+    if (!signalementAttachmentId || !attachmentFilename) return;
+
+    const response = await request(BASE_URL)
+      .get(`/api/signalement/${signalementAttachmentId}/attachments/${attachmentFilename}`)
+      .set('Authorization', `Bearer ${level2Token}`);
+
+    expect(response.status).toBe(403);
+  });
+
   it('creates a signalement to test assignment and update', async () => {
     const response = await request(BASE_URL)
       .post('/api/signalement')

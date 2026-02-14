@@ -2,6 +2,30 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import AuditLog from '../models/AuditLog.js';
 
+const loginAttempts = new Map();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 10 * 60 * 1000;
+
+const getClientKey = (req) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.ip || req.connection.remoteAddress || 'unknown';
+};
+
+const isRateLimited = (key) => {
+  const now = Date.now();
+  const entry = loginAttempts.get(key) || { count: 0, first: now };
+
+  if (now - entry.first > WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, first: now });
+    return false;
+  }
+
+  entry.count += 1;
+  loginAttempts.set(key, entry);
+  return entry.count > MAX_ATTEMPTS;
+};
+
 // Registration is disabled for security
 // All user accounts must be created by administrators directly in the database
 // Use: npm run seed (for initial setup)
@@ -9,6 +33,11 @@ import AuditLog from '../models/AuditLog.js';
 
 export const login = async (req, res) => {
   try {
+    const clientKey = getClientKey(req);
+    if (isRateLimited(clientKey)) {
+      return res.status(429).json({ message: 'Too many login attempts. Please try again later.' });
+    }
+
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).populate('village', 'name');
@@ -28,6 +57,9 @@ export const login = async (req, res) => {
     // Update last login
     user.lastLogin = new Date();
     await user.save();
+
+    // Reset rate limiter on successful login
+    loginAttempts.delete(clientKey);
 
     const token = jwt.sign(
       { id: user._id, role: user.role, village: user.village },

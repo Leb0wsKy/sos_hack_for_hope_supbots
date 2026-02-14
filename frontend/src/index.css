@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+/* ─── SOS Children's Villages – Brand Tokens ─── */
+@theme {
+  /* Brand Colors */
+  --color-sos-blue: #005BA6;
+  --color-sos-blue-dark: #004680;
+  --color-sos-blue-light: #E8F1FA;
+  --color-sos-red: #E30613;
+  --color-sos-red-light: #FDE8E8;
+  --color-sos-green: #00965E;
+  --color-sos-green-light: #E6F5EF;
+  --color-sos-yellow: #FFCC00;
+  --color-sos-yellow-light: #FFF9E0;
+  --color-sos-brown: #8B5E3C;
+  --color-sos-brown-light: #F5EDE6;
+  --color-sos-white: #FFFFFF;
+  --color-sos-gray-50: #F9FAFB;
+  --color-sos-gray-100: #F3F4F6;
+  --color-sos-gray-200: #E5E7EB;
+  --color-sos-gray-300: #D1D5DB;
+  --color-sos-gray-400: #9CA3AF;
+  --color-sos-gray-500: #6B7280;
+  --color-sos-gray-600: #4B5563;
+  --color-sos-gray-700: #374151;
+  --color-sos-gray-800: #1F2937;
+  --color-sos-gray-900: #111827;
+
+  /* Font Family — Aktiv Grotesk → Inter fallback */
+  --font-brand: 'Aktiv Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+
+  /* Border Radius — Speech Bubble motif */
+  --radius-bubble: 0.75rem 0.75rem 1.75rem 0.75rem;
+  --radius-bubble-alt: 0.75rem 0.75rem 0.75rem 1.75rem;
+}
+
+/* ─── Global Resets ─── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-brand);
+  color: var(--color-sos-gray-800);
+  background-color: var(--color-sos-gray-50);
+}
+
+/* ─── Typography Utility Classes ─── */
+.font-xbold {
+  font-weight: 800;
+}
+
+/* ─── Speech Bubble ─── */
+.bubble {
+  border-radius: var(--radius-bubble);
+}
+
+.bubble-alt {
+  border-radius: var(--radius-bubble-alt);
+}
+
+/* ─── Callout Numbers (XBold reserved for data viz) ─── */
+.callout-number {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+/* ─── Custom scrollbar ─── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--color-sos-gray-100);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-sos-gray-300);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sos-gray-400);
+}
+
+/* ─── File drop zone ─── */
+.drop-zone-active {
+  border-color: var(--color-sos-blue);
+  background-color: var(--color-sos-blue-light);
+}
+
+/* ─── Kanban column highlight ─── */
+.kanban-col {
+  min-height: 200px;
+}
+
+/* ─── Animations ─── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}

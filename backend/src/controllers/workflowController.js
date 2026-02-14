@@ -105,6 +105,17 @@ export const updateWorkflowStage = async (req, res) => {
       return res.status(400).json({ message: 'Invalid stage' });
     }
 
+    // Enforce sequential stage completion
+    const stageIndex = validStages.indexOf(stage);
+    for (let i = 0; i < stageIndex; i++) {
+      if (!workflow.stages[validStages[i]].completed) {
+        return res.status(400).json({
+          message: `Cannot complete '${stage}' before '${validStages[i]}'. Stages must be completed in order.`,
+          missingStage: validStages[i]
+        });
+      }
+    }
+
     // Update stage
     workflow.stages[stage].completed = true;
     workflow.stages[stage].completedAt = new Date();
@@ -297,6 +308,13 @@ export const escalateSignalement = async (req, res) => {
     const workflow = await Workflow.findById(workflowId).populate('signalement');
     if (!workflow) {
       return res.status(404).json({ message: 'Workflow not found' });
+    }
+
+    // Require classification before escalation
+    if (!workflow.classification) {
+      return res.status(400).json({
+        message: 'Cannot escalate before classification. Classify the signalement first.'
+      });
     }
 
     const signalement = await Signalement.findById(workflow.signalement._id);

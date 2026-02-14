@@ -1,5 +1,6 @@
 import Signalement from '../models/Signalement.js';
 import Village from '../models/Village.js';
+import User from '../models/User.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -14,6 +15,8 @@ const maskAnonymousSignalement = (signalement) => {
 
   if (data.isAnonymous) {
     data.createdBy = null;
+    data.childName = null;
+    data.abuserName = null;
   }
 
   return data;
@@ -200,6 +203,7 @@ export const getSignalements = async (req, res) => {
       .populate('village', 'name location region')
       .populate('assignedTo', 'name email')
       .populate('classifiedBy', 'name')
+      .populate('workflow', 'currentStage status stages assignedTo classification')
       .sort({ createdAt: -1 });
 
     const masked = signalements.map(maskAnonymousSignalement);
@@ -257,7 +261,22 @@ export const updateSignalement = async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
     }
 
-    Object.assign(signalement, req.body);
+    const ALLOWED_UPDATE_FIELDS = [
+      'title',
+      'description',
+      'program',
+      'incidentType',
+      'urgencyLevel',
+      'childName',
+      'abuserName'
+    ];
+
+    ALLOWED_UPDATE_FIELDS.forEach(field => {
+      if (req.body[field] !== undefined) {
+        signalement[field] = req.body[field];
+      }
+    });
+
     await signalement.save();
 
     res.json(maskAnonymousSignalement(signalement));
@@ -374,6 +393,22 @@ export const assignSignalement = async (req, res) => {
     const { id } = req.params;
     const { userId } = req.body;
 
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    // Validate target user exists, is active, and is Level 2
+    const targetUser = await User.findById(userId).select('role isActive village');
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
+    if (!targetUser.isActive) {
+      return res.status(400).json({ message: 'Target user is deactivated' });
+    }
+    if (targetUser.role !== 'LEVEL2') {
+      return res.status(400).json({ message: 'Signalements can only be assigned to Level 2 users' });
+    }
+
     const signalement = await Signalement.findById(id);
     if (!signalement) {
       return res.status(404).json({ message: 'Signalement not found' });
@@ -414,16 +449,19 @@ export const downloadAttachment = async (req, res) => {
     }
 
     // Check if user has permission to view this signalement
-    if (req.user.role === 'LEVEL1') {
-      // Level 1 can only access their own village's files
-      const userVillageId = req.user.village?._id || req.user.village;
-      const signalementVillageId = signalement.village;
-      
-      if (!userVillageId || userVillageId.toString() !== signalementVillageId.toString()) {
+    const scopeError = enforceVillageScope(req, signalement);
+    if (scopeError) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (req.user.role === 'LEVEL2') {
+      const isAssigned = signalement.assignedTo &&
+        signalement.assignedTo.toString() === req.user.id;
+
+      if (!isAssigned) {
         return res.status(403).json({ message: 'Access denied' });
       }
     }
-    // Level 2 and 3 can access all files
 
     // Find attachment in signalement
     const attachment = signalement.attachments.find(att => att.filename === filename);

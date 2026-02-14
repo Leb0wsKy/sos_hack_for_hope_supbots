@@ -27,22 +27,30 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Database connection
 connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/signalement', signalementRoutes);
+app.use('/api/signalements', signalementRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/workflow', workflowRoutes);
-app.use('/api/village', villageRoutes);
+app.use('/api/workflows', workflowRoutes);
+app.use('/api/villages', villageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dpe', dpeRoutes);
 app.use('/api/level2', level2Routes);
@@ -55,9 +63,9 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
-      signalement: '/api/signalement',
-      workflow: '/api/workflow',
-      village: '/api/village',
+      signalements: '/api/signalements',
+      workflows: '/api/workflows',
+      villages: '/api/villages',
       admin: '/api/admin',
       analytics: '/api/analytics'
     }
@@ -75,7 +83,7 @@ app.use((err, req, res, next) => {
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: '*'
+    origin: allowedOrigins.length > 0 ? allowedOrigins : false
   }
 });
 
