@@ -13,6 +13,8 @@ import analyticsRoutes from './routes/analytics.js';
 import workflowRoutes from './routes/workflow.js';
 import villageRoutes from './routes/village.js';
 import adminRoutes from './routes/admin.js';
+import dpeRoutes from './routes/dpe.js';
+import level2Routes from './routes/level2.js';
 import { setSocketServer } from './services/socket.js';
 
 dotenv.config();
@@ -42,6 +44,9 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/workflow', workflowRoutes);
 app.use('/api/village', villageRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/dpe', dpeRoutes);
+app.use('/api/level2', level2Routes);
+
 
 // Basic route
 app.get('/', (req, res) => {
