@@ -3,7 +3,7 @@ import {
   createWorkflow,
   getWorkflow,
   updateWorkflowStage,
-  generateDPEReport,
+  downloadTemplate,
   classifySignalement,
   addWorkflowNote,
   getMyWorkflows,
@@ -19,6 +19,9 @@ const router = express.Router();
 // All workflow routes require Level 2 or higher
 router.use(protect);
 router.use(requireLevel2);
+
+// Download predefined templates (rapport-initial / rapport-final)
+router.get('/templates/:templateName', downloadTemplate);
 
 // Get my workflows (dashboard)
 router.get('/my-workflows', logAudit('VIEW_SIGNALEMENT'), getMyWorkflows);
@@ -36,13 +39,6 @@ router.put(
   upload.array('attachments', 5),
   logAudit('UPDATE_WORKFLOW', 'Workflow'),
   updateWorkflowStage
-);
-
-// Generate DPE report with AI (assignment checked)
-router.post('/:workflowId/generate-dpe', 
-  checkWorkflowAssignment,
-  logAudit('GENERATE_REPORT', 'Workflow'), 
-  generateDPEReport
 );
 
 // Classify signalement (assignment checked)

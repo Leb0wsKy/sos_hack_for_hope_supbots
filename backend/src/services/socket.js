@@ -22,19 +22,13 @@ const resolveTargets = (event, payload) => {
       return [roomForRoleVillage('LEVEL2', villageId)];
     case 'workflow.stageCompleted':
       if (!villageId) return [];
-      if (payload?.stage === 'initialReport' || payload?.stage === 'dpeReport') {
+      if (payload?.stage === 'initialReport' || payload?.stage === 'finalReport') {
         return [
           roomForRoleDetailsVillage('VILLAGE_DIRECTOR', villageId),
           roomForRoleDetails('NATIONAL_OFFICE')
         ];
       }
       return [];
-    case 'workflow.dpeGenerated':
-      if (!villageId) return [roomForRoleDetails('NATIONAL_OFFICE')];
-      return [
-        roomForRoleDetailsVillage('VILLAGE_DIRECTOR', villageId),
-        roomForRoleDetails('NATIONAL_OFFICE')
-      ];
     case 'signalement.escalated':
       if (payload?.escalatedTo === 'NATIONAL_OFFICE') {
         return [roomForRoleDetails('NATIONAL_OFFICE')];

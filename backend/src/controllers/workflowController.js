@@ -1,8 +1,20 @@
 import Workflow from '../models/Workflow.js';
 import Signalement from '../models/Signalement.js';
 import { emitEvent } from '../services/socket.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-// Create workflow for a signalement
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/* ═══════════════════════════════════════════════════════
+   Workflow Controller — simplified 2-stage document flow
+   Stage 1: initialReport  (Rapport Initial)  — 24 h
+   Stage 2: finalReport    (Rapport Final)    — 48 h
+   ═══════════════════════════════════════════════════════ */
+
+// ------ Create workflow (called automatically by sauvegarder, or manually) ------
 export const createWorkflow = async (req, res) => {
   try {
     const { signalementId } = req.body;
@@ -12,24 +24,32 @@ export const createWorkflow = async (req, res) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
-    // Check if workflow already exists
     const existingWorkflow = await Workflow.findOne({ signalement: signalementId });
     if (existingWorkflow) {
       return res.status(400).json({ message: 'Workflow already exists for this signalement' });
     }
 
+    const now = new Date();
+    const initialDeadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+
     const workflow = new Workflow({
       signalement: signalementId,
-      assignedTo: req.user.id
+      assignedTo: req.user.id,
+      stages: {
+        initialReport: { dueAt: initialDeadline },
+        finalReport: {}  // deadline set when step 1 completes
+      }
     });
 
     await workflow.save();
 
-    // Update signalement
+    // Link workflow to signalement and mark EN_COURS
     signalement.workflow = workflow._id;
     signalement.assignedTo = req.user.id;
-    signalement.assignedAt = new Date();
+    signalement.assignedAt = now;
     signalement.status = 'EN_COURS';
+    signalement.sauvegardedAt = now;
+    signalement.deadlineAt = initialDeadline;
     await signalement.save();
 
     emitEvent('workflow.created', {
@@ -45,11 +65,11 @@ export const createWorkflow = async (req, res) => {
   }
 };
 
-// Get workflow by signalement ID
+// ------ Get workflow by signalement ID ------
 export const getWorkflow = async (req, res) => {
   try {
     const { signalementId } = req.params;
-    
+
     const workflow = await Workflow.findOne({ signalement: signalementId })
       .populate('signalement')
       .populate('assignedTo', 'name email role')
@@ -59,18 +79,15 @@ export const getWorkflow = async (req, res) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    // Add read-only indicator for governance users
     const response = workflow.toObject();
     if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
       response.readOnly = true;
       response.canEdit = false;
-      response.allowedActions = ['view', 'closure-decision'];
     } else if (req.user.role === 'LEVEL2') {
-      const isAssigned = workflow.assignedTo && 
+      const isAssigned = workflow.assignedTo &&
                          workflow.assignedTo._id.toString() === req.user.id;
       response.readOnly = !isAssigned;
       response.canEdit = isAssigned;
-      response.allowedActions = isAssigned ? ['view', 'edit', 'update-stages'] : ['view'];
     }
 
     res.json(response);
@@ -79,53 +96,41 @@ export const getWorkflow = async (req, res) => {
   }
 };
 
-// Update workflow stage (assignment checked by middleware)
+// ------ Update workflow stage (2-stage sequential) ------
 export const updateWorkflowStage = async (req, res) => {
   try {
     const { workflowId } = req.params;
-    const { stage, content, dueAt } = req.body;
+    const { stage, content } = req.body;
 
-    // Use workflow from middleware if available
     const workflow = req.workflow || await Workflow.findById(workflowId);
     if (!workflow) {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    const validStages = [
-      'initialReport',
-      'dpeReport',
-      'evaluation',
-      'actionPlan',
-      'followUpReport',
-      'finalReport',
-      'closureNotice'
-    ];
-    
+    // Only 2 valid stages
+    const validStages = ['initialReport', 'finalReport'];
     if (!validStages.includes(stage)) {
-      return res.status(400).json({ message: 'Invalid stage' });
+      return res.status(400).json({ message: 'Étape invalide. Seuls initialReport et finalReport sont acceptés.' });
     }
 
-    // Enforce sequential stage completion
-    const stageIndex = validStages.indexOf(stage);
-    for (let i = 0; i < stageIndex; i++) {
-      if (!workflow.stages[validStages[i]].completed) {
-        return res.status(400).json({
-          message: `Cannot complete '${stage}' before '${validStages[i]}'. Stages must be completed in order.`,
-          missingStage: validStages[i]
-        });
-      }
+    // Sequential enforcement: can't do finalReport if initialReport not done
+    if (stage === 'finalReport' && !workflow.stages.initialReport.completed) {
+      return res.status(400).json({
+        message: 'Impossible de valider le Rapport Final avant le Rapport Initial.',
+        missingStage: 'initialReport'
+      });
     }
 
-    // Update stage
-    workflow.stages[stage].completed = true;
-    workflow.stages[stage].completedAt = new Date();
-    workflow.stages[stage].completedBy = req.user.id;
-    workflow.stages[stage].content = content;
-
-    if (dueAt) {
-      workflow.stages[stage].dueAt = new Date(dueAt);
+    // Must have at least one file attachment to validate a stage
+    if (!req.files?.length && (!workflow.stages[stage].attachments || workflow.stages[stage].attachments.length === 0)) {
+      return res.status(400).json({
+        message: 'Un document doit être téléversé pour valider cette étape.'
+      });
     }
 
+    const now = new Date();
+
+    // Append uploaded files
     if (req.files?.length) {
       const attachments = req.files.map((file) => ({
         filename: file.filename,
@@ -134,32 +139,54 @@ export const updateWorkflowStage = async (req, res) => {
         size: file.size,
         path: file.path
       }));
-
       const existing = workflow.stages[stage].attachments || [];
       workflow.stages[stage].attachments = existing.concat(attachments);
     }
 
+    // Mark stage completed
+    workflow.stages[stage].completed = true;
+    workflow.stages[stage].completedAt = now;
+    workflow.stages[stage].completedBy = req.user.id;
+    if (content) workflow.stages[stage].content = content;
+
+    // Check overdue and record penalty
     if (workflow.stages[stage].dueAt) {
-      workflow.stages[stage].isOverdue =
-        workflow.stages[stage].completedAt > workflow.stages[stage].dueAt;
+      const isOverdue = now > workflow.stages[stage].dueAt;
+      workflow.stages[stage].isOverdue = isOverdue;
+      if (isOverdue) {
+        const delayMs = now.getTime() - workflow.stages[stage].dueAt.getTime();
+        const delayHours = Math.round((delayMs / (1000 * 60 * 60)) * 10) / 10;
+        workflow.penalties.push({
+          stage,
+          dueAt: workflow.stages[stage].dueAt,
+          completedAt: now,
+          delayHours,
+          userId: req.user.id
+        });
+      }
     }
 
-    // Update current stage
-    const stageMap = {
-      'initialReport': 'INITIAL',
-      'dpeReport': 'DPE',
-      'evaluation': 'EVALUATION',
-      'actionPlan': 'ACTION_PLAN',
-      'followUpReport': 'FOLLOW_UP',
-      'finalReport': 'FINAL_REPORT',
-      'closureNotice': 'CLOSURE'
-    };
-    workflow.currentStage = stageMap[stage];
+    // Advance currentStage
+    if (stage === 'initialReport') {
+      // Set 48h deadline for finalReport
+      const finalDeadline = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      workflow.stages.finalReport.dueAt = finalDeadline;
+      workflow.currentStage = 'FINAL_REPORT';
+
+      // Update signalement deadline to reflect step 2
+      const signalement = await Signalement.findById(workflow.signalement);
+      if (signalement) {
+        signalement.deadlineAt = finalDeadline;
+        await signalement.save();
+      }
+    } else if (stage === 'finalReport') {
+      workflow.currentStage = 'COMPLETED';
+      workflow.status = 'COMPLETED';
+    }
 
     await workflow.save();
 
     const signalement = await Signalement.findById(workflow.signalement).select('village');
-
     emitEvent('workflow.stageCompleted', {
       id: workflow._id,
       signalement: workflow.signalement,
@@ -173,60 +200,33 @@ export const updateWorkflowStage = async (req, res) => {
   }
 };
 
-// Generate DPE report with AI (placeholder)
-export const generateDPEReport = async (req, res) => {
+// ------ Download predefined template ------
+export const downloadTemplate = async (req, res) => {
   try {
-    const { workflowId } = req.params;
+    const { templateName } = req.params;
 
-    const workflow = await Workflow.findById(workflowId).populate('signalement');
-    if (!workflow) {
-      return res.status(404).json({ message: 'Workflow not found' });
+    const templates = {
+      'rapport-initial': 'rapport_initial_template.txt',
+      'rapport-final': 'rapport_final_template.txt'
+    };
+
+    const filename = templates[templateName];
+    if (!filename) {
+      return res.status(400).json({ message: 'Template invalide. Utilisez rapport-initial ou rapport-final.' });
     }
 
-    // AI placeholder - would integrate with local AI model
-    const aiGeneratedReport = `
-RAPPORT DPE - Généré automatiquement
+    const filePath = path.join(__dirname, '../../templates', filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'Fichier template introuvable.' });
+    }
 
-Signalement: ${workflow.signalement.title}
-Type d'incident: ${workflow.signalement.incidentType}
-Urgence: ${workflow.signalement.urgencyLevel}
-
-Description de l'incident:
-${workflow.signalement.description}
-
-Analyse préliminaire:
-[À compléter par le psychologue]
-
-Recommandations:
-[À compléter par le psychologue]
-
-Actions immédiates:
-[À compléter par le psychologue]
-
-Note: Ce rapport a été généré automatiquement et doit être révisé et complété par un professionnel qualifié.
-    `.trim();
-
-    workflow.stages.dpeReport.content = aiGeneratedReport;
-    workflow.stages.dpeReport.aiGenerated = true;
-    await workflow.save();
-
-    emitEvent('workflow.dpeGenerated', {
-      id: workflow._id,
-      signalement: workflow.signalement?._id || workflow.signalement,
-      village: workflow.signalement?.village
-    });
-
-    res.json({ 
-      message: 'DPE report generated',
-      content: aiGeneratedReport,
-      workflow 
-    });
+    res.download(filePath, filename);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Classify signalement
+// ------ Classify signalement ------
 export const classifySignalement = async (req, res) => {
   try {
     const { workflowId } = req.params;
@@ -245,16 +245,13 @@ export const classifySignalement = async (req, res) => {
     workflow.classification = classification;
     await workflow.save();
 
-    // Update signalement
     const signalement = await Signalement.findById(workflow.signalement._id);
     signalement.classification = classification;
     signalement.classifiedBy = req.user.id;
     signalement.classifiedAt = new Date();
-    
     if (classification === 'FAUX_SIGNALEMENT') {
       signalement.status = 'FAUX_SIGNALEMENT';
     }
-
     await signalement.save();
 
     emitEvent('signalement.classified', {
@@ -269,7 +266,7 @@ export const classifySignalement = async (req, res) => {
   }
 };
 
-// Add note to workflow
+// ------ Add note to workflow ------
 export const addWorkflowNote = async (req, res) => {
   try {
     const { workflowId } = req.params;
@@ -287,14 +284,13 @@ export const addWorkflowNote = async (req, res) => {
     });
 
     await workflow.save();
-
     res.json(workflow);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Escalate signalement to Level 3
+// ------ Escalate signalement to Level 3 ------
 export const escalateSignalement = async (req, res) => {
   try {
     const { workflowId } = req.params;
@@ -310,10 +306,9 @@ export const escalateSignalement = async (req, res) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    // Require classification before escalation
     if (!workflow.classification) {
       return res.status(400).json({
-        message: 'Cannot escalate before classification. Classify the signalement first.'
+        message: 'Cannot escalate before classification.'
       });
     }
 
@@ -336,35 +331,47 @@ export const escalateSignalement = async (req, res) => {
   }
 };
 
-// Get all workflows (Level 2 dashboard - only assigned workflows)
+// ------ Get my workflows (dashboard) ------
 export const getMyWorkflows = async (req, res) => {
   try {
-    // Level 2 can only see workflows assigned to them
     if (req.user.role === 'LEVEL2') {
-      const workflows = await Workflow.find({ 
-        assignedTo: req.user.id,
-        status: 'ACTIVE'
+      const workflows = await Workflow.find({
+        assignedTo: req.user.id
       })
         .populate('signalement')
         .populate('assignedTo', 'name email')
         .sort({ createdAt: -1 });
 
-      res.json(workflows);
+      // Attach live deadline info
+      const enriched = workflows.map(w => {
+        const obj = w.toObject();
+        const now = Date.now();
+
+        for (const key of ['initialReport', 'finalReport']) {
+          const stage = obj.stages?.[key];
+          if (stage?.dueAt && !stage.completed) {
+            const remaining = new Date(stage.dueAt).getTime() - now;
+            stage.hoursRemaining = Math.round((remaining / (1000 * 60 * 60)) * 10) / 10;
+            stage.isDeadlineExpired = remaining <= 0;
+          }
+        }
+        return obj;
+      });
+
+      res.json(enriched);
     } else if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
-      // Level 3/4 can view all workflows but with read-only indicator
-      const workflows = await Workflow.find({ status: 'ACTIVE' })
+      const workflows = await Workflow.find()
         .populate('signalement')
         .populate('assignedTo', 'name email')
         .sort({ createdAt: -1 });
 
-      const workflowsWithPermissions = workflows.map(w => ({
+      const withPerms = workflows.map(w => ({
         ...w.toObject(),
         readOnly: true,
-        canEdit: false,
-        allowedActions: ['view', 'closure-decision']
+        canEdit: false
       }));
 
-      res.json(workflowsWithPermissions);
+      res.json(withPerms);
     } else {
       res.status(403).json({ message: 'Access denied' });
     }

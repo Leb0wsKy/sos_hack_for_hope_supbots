@@ -489,7 +489,7 @@ export const downloadAttachment = async (req, res) => {
   }
 };
 
-// Sauvegarder signalement (Level 2 takes ownership)
+// Sauvegarder signalement (Level 2 takes ownership + auto-creates workflow)
 export const sauvegarderSignalement = async (req, res) => {
   try {
     const { id } = req.params;
@@ -517,24 +517,49 @@ export const sauvegarderSignalement = async (req, res) => {
     }
 
     const now = new Date();
-    const deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+    const initialDeadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Update signalement
     signalement.status = 'EN_COURS';
     signalement.assignedTo = req.user.id;
     signalement.assignedAt = now;
     signalement.sauvegardedAt = now;
-    signalement.deadlineAt = deadline;
+    signalement.deadlineAt = initialDeadline;
+
+    // Auto-create workflow with deadlines
+    const Workflow = (await import('../models/Workflow.js')).default;
+    let workflow = await Workflow.findOne({ signalement: id });
+    if (!workflow) {
+      workflow = new Workflow({
+        signalement: id,
+        assignedTo: req.user.id,
+        stages: {
+          initialReport: { dueAt: initialDeadline },
+          finalReport: {}
+        }
+      });
+      await workflow.save();
+      signalement.workflow = workflow._id;
+    }
 
     await signalement.save();
 
     await signalement.populate('village', 'name location region');
     await signalement.populate('assignedTo', 'name email role');
 
+    const { emitEvent } = await import('../services/socket.js');
+    emitEvent('workflow.created', {
+      id: workflow._id,
+      signalement: signalement._id,
+      assignedTo: req.user.id,
+      village: signalement.village
+    });
+
     res.json({
-      message: 'Signalement sauvegardé avec succès. Vous avez 24 heures pour le clôturer.',
+      message: 'Signalement sauvegardé. Vous avez 24h pour soumettre le Rapport Initial.',
       signalement,
-      deadlineAt: deadline,
+      workflow,
+      deadlineAt: initialDeadline,
       hoursRemaining: 24
     });
   } catch (error) {

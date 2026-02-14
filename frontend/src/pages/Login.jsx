@@ -7,7 +7,7 @@ const ROLE_HOME = {
   LEVEL1: '/dashboard-level1',
   LEVEL2: '/dashboard-level2',
   LEVEL3: '/dashboard-level3',
-  LEVEL4: '/dashboard-level3',
+  LEVEL4: '/dashboard-level4',
 };
 
 function Login() {

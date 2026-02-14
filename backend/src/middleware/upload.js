@@ -17,7 +17,12 @@ const allowedTypes = {
   'audio/wav': ['.wav'],
   'video/mp4': ['.mp4'],
   'video/quicktime': ['.mov'],
-  'application/pdf': ['.pdf']
+  'application/pdf': ['.pdf'],
+  // Document types for workflow template uploads
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/plain': ['.txt'],
+  'application/vnd.oasis.opendocument.text': ['.odt']
 };
 
 // Configure storage

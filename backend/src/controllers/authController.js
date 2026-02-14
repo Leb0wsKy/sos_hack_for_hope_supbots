@@ -112,8 +112,8 @@ export const getProfile = async (req, res) => {
       signalements = await Signalement.find({ 
         createdBy: user._id 
       })
-        .select('title description incidentType urgencyLevel status createdAt')
-        .populate('village', 'name')
+        .select('title description incidentType urgencyLevel status createdAt program childName abuserName isAnonymous')
+        .populate('village', 'name location')
         .sort({ createdAt: -1 })
         .limit(10); // Get last 10 signalements
     }

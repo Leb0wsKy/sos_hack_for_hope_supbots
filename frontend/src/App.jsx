@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import DashboardLevel1 from './pages/DashboardLevel1';
 import DashboardLevel2 from './pages/DashboardLevel2';
 import DashboardLevel3 from './pages/DashboardLevel3';
+import DashboardLevel4 from './pages/DashboardLevel4';
 
 /* Redirect to login when no token is present */
 function ProtectedRoute({ children, allowedRoles }) {
@@ -41,6 +42,11 @@ function App() {
         <Route path="/dashboard-level3" element={
           <ProtectedRoute allowedRoles={['LEVEL3','LEVEL4']}>
             <DashboardLevel3 />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard-level4" element={
+          <ProtectedRoute allowedRoles={['LEVEL4']}>
+            <DashboardLevel4 />
           </ProtectedRoute>
         } />
       </Routes>

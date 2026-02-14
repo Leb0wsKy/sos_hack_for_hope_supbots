@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
-
+/* Use a relative path so requests go through Vite's dev-server proxy
+   (see vite.config.js  →  /api  →  http://localhost:5000).
+   This avoids CORS issues and works in production behind a reverse proxy. */
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json'
   }
@@ -71,6 +72,8 @@ export const escalateSignalement = (workflowId, data) =>
   api.put(`/workflows/${workflowId}/escalate`, data);
 export const addWorkflowNote = (workflowId, data) =>
   api.post(`/workflows/${workflowId}/notes`, data);
+export const downloadTemplate = (templateName) =>
+  api.get(`/workflows/templates/${templateName}`, { responseType: 'blob' });
 
 /* ── Analytics ── */
 export const getAnalytics = (params) => api.get('/analytics', { params });
@@ -78,5 +81,11 @@ export const getHeatmapData = () => api.get('/analytics/heatmap');
 export const getVillageRatings = () => api.get('/analytics/village-ratings');
 export const exportData = (params) =>
   api.get('/analytics/export', { params });
+
+/* ── Admin (Level 4) ── */
+export const getAdminUsers = (params) => api.get('/admin/users', { params });
+export const createAdminUser = (data) => api.post('/admin/users', data);
+export const updateUserStatus = (id, data) => api.put(`/admin/users/${id}/status`, data);
+export const resetUserPassword = (id, data) => api.put(`/admin/users/${id}/reset-password`, data);
 
 export default api;
