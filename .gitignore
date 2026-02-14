@@ -72,3 +72,4 @@ backend/dist/
 
 # Debug
 *.log
+*.env
