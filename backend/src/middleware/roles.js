@@ -21,15 +21,16 @@ export const checkRole = (allowedRoles) => {
 };
 
 // Helper middleware
-export const requireLevel1 = checkRole(['LEVEL1', 'LEVEL2', 'LEVEL3']);
-export const requireLevel2 = checkRole(['LEVEL2', 'LEVEL3']);
-export const requireLevel3 = checkRole(['LEVEL3']);
+export const requireLevel1 = checkRole(['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4']);
+export const requireLevel2 = checkRole(['LEVEL2', 'LEVEL3', 'LEVEL4']);
+export const requireLevel3 = checkRole(['LEVEL3', 'LEVEL4']);
+export const requireLevel4 = checkRole(['LEVEL4']);
 
 // Village scope check - Level 2 can only access assigned villages
 export const checkVillageScope = async (req, res, next) => {
   try {
-    if (req.user.role === 'LEVEL3') {
-      // Level 3 (governance) can view all villages
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
+      // Level 3 & 4 (governance/admin) can view all villages
       return next();
     }
 
@@ -77,8 +78,8 @@ export const checkAssignment = async (req, res, next) => {
       return res.status(404).json({ message: 'Signalement not found' });
     }
 
-    // Level 3 can view but edits are restricted (handled in controller)
-    if (req.user.role === 'LEVEL3') {
+    // Level 3 & 4 can view but edits are restricted (handled in controller)
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
       req.isAssigned = false;
       req.signalement = signalement;
       return next();
@@ -127,8 +128,8 @@ export const checkWorkflowAssignment = async (req, res, next) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    // Level 3 can only view, not edit workflows
-    if (req.user.role === 'LEVEL3' && req.method !== 'GET') {
+    // Level 3 & 4 can only view, not edit workflows
+    if ((req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') && req.method !== 'GET') {
       return res.status(403).json({ 
         message: 'Governance can view workflows but cannot edit them. Edits are limited to closure/archive decisions.'
       });
@@ -158,11 +159,11 @@ export const checkWorkflowAssignment = async (req, res, next) => {
 
 // Governance-only operations (closure/archive)
 export const allowGovernanceOperation = (req, res, next) => {
-  if (req.user.role === 'LEVEL3') {
+  if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
     return next();
   }
   
   return res.status(403).json({ 
-    message: 'Access denied. Only governance (Level 3) can perform this operation.'
+    message: 'Access denied. Only governance (Level 3/4) can perform this operation.'
   });
 };

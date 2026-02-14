@@ -157,8 +157,8 @@ export const updateSignalement = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Level 3 cannot use general update - only closure/archive
-    if (req.user.role === 'LEVEL3') {
+    // Level 3/4 cannot use general update - only closure/archive
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
       return res.status(403).json({ 
         message: 'Governance users cannot use general update. Use closure or archive endpoints instead.'
       });

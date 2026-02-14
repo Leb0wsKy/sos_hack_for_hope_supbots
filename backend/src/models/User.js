@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['LEVEL1', 'LEVEL2', 'LEVEL3'],
+    enum: ['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4'],
     default: 'LEVEL1'
   },
   // Role details
@@ -30,7 +30,8 @@ const userSchema = new mongoose.Schema({
       'PSYCHOLOGIST',
       'SOCIAL_WORKER',
       'VILLAGE_DIRECTOR',
-      'NATIONAL_OFFICE'
+      'NATIONAL_OFFICE',
+      'SUPER_ADMIN'
     ]
   },
   // Village assignment

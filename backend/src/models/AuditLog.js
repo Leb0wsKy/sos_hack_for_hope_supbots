@@ -10,6 +10,10 @@ const auditLogSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
+      'VIEW_USERS',
+      'CREATE_USER',
+      'UPDATE_USER',
+      'RESET_PASSWORD',
       'CREATE_SIGNALEMENT',
       'UPDATE_SIGNALEMENT',
       'DELETE_SIGNALEMENT',
@@ -21,6 +25,8 @@ const auditLogSchema = new mongoose.Schema({
       'GENERATE_REPORT',
       'LOGIN',
       'LOGOUT',
+      'CREATE_VILLAGE',
+      'UPDATE_VILLAGE',
       'ACCESS_ANALYTICS',
       'EXPORT_DATA'
     ]

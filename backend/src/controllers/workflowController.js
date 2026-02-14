@@ -53,7 +53,7 @@ export const getWorkflow = async (req, res) => {
 
     // Add read-only indicator for governance users
     const response = workflow.toObject();
-    if (req.user.role === 'LEVEL3') {
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
       response.readOnly = true;
       response.canEdit = false;
       response.allowedActions = ['view', 'closure-decision'];
@@ -83,7 +83,15 @@ export const updateWorkflowStage = async (req, res) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    const validStages = ['dpeReport', 'evaluation', 'actionPlan', 'followUpReport', 'finalReport', 'closureNotice'];
+    const validStages = [
+      'initialReport',
+      'dpeReport',
+      'evaluation',
+      'actionPlan',
+      'followUpReport',
+      'finalReport',
+      'closureNotice'
+    ];
     
     if (!validStages.includes(stage)) {
       return res.status(400).json({ message: 'Invalid stage' });
@@ -97,6 +105,7 @@ export const updateWorkflowStage = async (req, res) => {
 
     // Update current stage
     const stageMap = {
+      'initialReport': 'INITIAL',
       'dpeReport': 'DPE',
       'evaluation': 'EVALUATION',
       'actionPlan': 'ACTION_PLAN',
@@ -237,8 +246,8 @@ export const getMyWorkflows = async (req, res) => {
         .sort({ createdAt: -1 });
 
       res.json(workflows);
-    } else if (req.user.role === 'LEVEL3') {
-      // Level 3 can view all workflows but with read-only indicator
+    } else if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
+      // Level 3/4 can view all workflows but with read-only indicator
       const workflows = await Workflow.find({ status: 'ACTIVE' })
         .populate('signalement')
         .populate('assignedTo', 'name email')
