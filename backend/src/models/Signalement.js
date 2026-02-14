@@ -117,6 +117,14 @@ const signalementSchema = new mongoose.Schema({
     type: Date
   },
   
+  // Sauvegarde (Level 2 takes ownership)
+  sauvegardedAt: {
+    type: Date
+  },
+  deadlineAt: {
+    type: Date
+  },
+  
   // Closure
   closedBy: {
     type: mongoose.Schema.Types.ObjectId,

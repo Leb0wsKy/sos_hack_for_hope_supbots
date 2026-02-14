@@ -93,20 +93,43 @@ export const getSignalements = async (req, res) => {
     
     let filter = {};
     
-    // Role-based filtering
+    // Role-based filtering with village scope
     if (req.user.role === 'LEVEL1') {
       // Level 1 only sees their own village's reports
       filter.village = req.user.village;
     } else if (req.user.role === 'LEVEL2') {
-      // Level 2 sees assigned or their village
+      // Level 2 can only see signalements from their assigned villages
+      if (req.accessibleVillages && req.accessibleVillages.length > 0) {
+        filter.village = { $in: req.accessibleVillages };
+      }
+      
+      // Level 2 can only see:
+      // 1. Unassigned signalements (EN_ATTENTE)
+      // 2. Their own assigned signalements
+      filter.$or = [
+        { status: 'EN_ATTENTE', assignedTo: null },
+        { assignedTo: req.user.id }
+      ];
+      
+      // If they want only their primary village
       if (myVillage === 'true') {
         filter.village = req.user.village;
       }
     }
-    // Level 3 sees all
+    // Level 3/4 sees all (no filter)
     
     if (status) filter.status = status;
-    if (village) filter.village = village;
+    if (village) {
+      // Level 2 can only filter within their accessible villages
+      if (req.user.role === 'LEVEL2') {
+        if (!req.accessibleVillages || !req.accessibleVillages.includes(village)) {
+          return res.status(403).json({ 
+            message: 'Access denied. You can only access signalements from your assigned villages.' 
+          });
+        }
+      }
+      filter.village = village;
+    }
     if (urgencyLevel) filter.urgencyLevel = urgencyLevel;
     if (incidentType) filter.incidentType = incidentType;
     
@@ -143,10 +166,19 @@ export const getSignalementById = async (req, res) => {
   }
 };
 
-// Update signalement (Level 2+)
+// Update signalement (Level 2+ with restrictions)
 export const updateSignalement = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Level 3/4 cannot use general update - only closure/archive
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
+      return res.status(403).json({ 
+        message: 'Governance users cannot use general update. Use closure or archive endpoints instead.'
+      });
+    }
+
+    // Level 2 must be assigned (checked by middleware)
     const signalement = await Signalement.findByIdAndUpdate(
       id,
       req.body,
@@ -301,6 +333,107 @@ export const downloadAttachment = async (req, res) => {
     // Stream file to response
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Sauvegarder signalement (Level 2 takes ownership)
+export const sauvegarderSignalement = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const signalement = await Signalement.findById(id);
+    if (!signalement) {
+      return res.status(404).json({ message: 'Signalement not found' });
+    }
+
+    // Check if already assigned to someone else
+    if (signalement.assignedTo && signalement.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({ 
+        message: 'Ce signalement est déjà pris en charge par un autre utilisateur.',
+        assignedTo: signalement.assignedTo
+      });
+    }
+
+    // Check if already in treatment
+    if (signalement.status === 'EN_COURS' && signalement.assignedTo && signalement.assignedTo.toString() === req.user.id) {
+      return res.status(400).json({ 
+        message: 'Vous avez déjà sauvegardé ce signalement.',
+        sauvegardedAt: signalement.sauvegardedAt,
+        deadlineAt: signalement.deadlineAt
+      });
+    }
+
+    const now = new Date();
+    const deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Update signalement
+    signalement.status = 'EN_COURS';
+    signalement.assignedTo = req.user.id;
+    signalement.assignedAt = now;
+    signalement.sauvegardedAt = now;
+    signalement.deadlineAt = deadline;
+
+    await signalement.save();
+
+    await signalement.populate('village', 'name location region');
+    await signalement.populate('assignedTo', 'name email role');
+
+    res.json({
+      message: 'Signalement sauvegardé avec succès. Vous avez 24 heures pour le clôturer.',
+      signalement,
+      deadlineAt: deadline,
+      hoursRemaining: 24
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get signalements with deadline warnings
+export const getMySignalementsWithDeadlines = async (req, res) => {
+  try {
+    if (req.user.role !== 'LEVEL2') {
+      return res.status(403).json({ message: 'Access denied. Level 2 only.' });
+    }
+
+    const signalements = await Signalement.find({ 
+      assignedTo: req.user.id,
+      status: 'EN_COURS'
+    })
+      .populate('village', 'name location region')
+      .populate('createdBy', 'name email role')
+      .sort({ deadlineAt: 1 }); // Sort by deadline (earliest first)
+
+    const now = new Date();
+    
+    const signalementsWithStatus = signalements.map(s => {
+      const sig = s.toObject();
+      
+      if (sig.deadlineAt) {
+        const timeRemaining = sig.deadlineAt - now;
+        const hoursRemaining = Math.floor(timeRemaining / (1000 * 60 * 60));
+        const minutesRemaining = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+        
+        sig.isDeadlineExpired = timeRemaining <= 0;
+        sig.isDeadlineApproaching = hoursRemaining <= 6 && hoursRemaining > 0;
+        sig.hoursRemaining = Math.max(0, hoursRemaining);
+        sig.minutesRemaining = Math.max(0, minutesRemaining);
+        sig.deadlineWarning = hoursRemaining <= 0 
+          ? 'Délai expiré!' 
+          : hoursRemaining <= 6 
+            ? `Attention: ${hoursRemaining}h ${minutesRemaining}min restantes`
+            : `${hoursRemaining}h ${minutesRemaining}min restantes`;
+      }
+      
+      return sig;
+    });
+
+    res.json({
+      count: signalementsWithStatus.length,
+      signalements: signalementsWithStatus
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

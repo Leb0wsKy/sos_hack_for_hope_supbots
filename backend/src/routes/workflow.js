@@ -9,7 +9,7 @@ import {
   getMyWorkflows
 } from '../controllers/workflowController.js';
 import { protect } from '../middleware/auth.js';
-import { requireLevel2 } from '../middleware/roles.js';
+import { requireLevel2, checkWorkflowAssignment } from '../middleware/roles.js';
 import { logAudit } from '../middleware/auditLog.js';
 
 const router = express.Router();
@@ -27,16 +27,32 @@ router.get('/:signalementId', logAudit('VIEW_SIGNALEMENT'), getWorkflow);
 // Create workflow
 router.post('/', logAudit('CREATE_WORKFLOW', 'Workflow'), createWorkflow);
 
-// Update workflow stage
-router.put('/:workflowId/stage', logAudit('UPDATE_WORKFLOW', 'Workflow'), updateWorkflowStage);
+// Update workflow stage (assignment checked)
+router.put('/:workflowId/stage', 
+  checkWorkflowAssignment,
+  logAudit('UPDATE_WORKFLOW', 'Workflow'), 
+  updateWorkflowStage
+);
 
-// Generate DPE report with AI
-router.post('/:workflowId/generate-dpe', logAudit('GENERATE_REPORT', 'Workflow'), generateDPEReport);
+// Generate DPE report with AI (assignment checked)
+router.post('/:workflowId/generate-dpe', 
+  checkWorkflowAssignment,
+  logAudit('GENERATE_REPORT', 'Workflow'), 
+  generateDPEReport
+);
 
-// Classify signalement
-router.put('/:workflowId/classify', logAudit('CLASSIFY_SIGNALEMENT', 'Workflow'), classifySignalement);
+// Classify signalement (assignment checked)
+router.put('/:workflowId/classify', 
+  checkWorkflowAssignment,
+  logAudit('CLASSIFY_SIGNALEMENT', 'Workflow'), 
+  classifySignalement
+);
 
-// Add note
-router.post('/:workflowId/notes', logAudit('UPDATE_WORKFLOW', 'Workflow'), addWorkflowNote);
+// Add note (assignment checked)
+router.post('/:workflowId/notes', 
+  checkWorkflowAssignment,
+  logAudit('UPDATE_WORKFLOW', 'Workflow'), 
+  addWorkflowNote
+);
 
 export default router;

@@ -51,19 +51,34 @@ export const getWorkflow = async (req, res) => {
       return res.status(404).json({ message: 'Workflow not found' });
     }
 
-    res.json(workflow);
+    // Add read-only indicator for governance users
+    const response = workflow.toObject();
+    if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
+      response.readOnly = true;
+      response.canEdit = false;
+      response.allowedActions = ['view', 'closure-decision'];
+    } else if (req.user.role === 'LEVEL2') {
+      const isAssigned = workflow.assignedTo && 
+                         workflow.assignedTo._id.toString() === req.user.id;
+      response.readOnly = !isAssigned;
+      response.canEdit = isAssigned;
+      response.allowedActions = isAssigned ? ['view', 'edit', 'update-stages'] : ['view'];
+    }
+
+    res.json(response);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Update workflow stage
+// Update workflow stage (assignment checked by middleware)
 export const updateWorkflowStage = async (req, res) => {
   try {
     const { workflowId } = req.params;
     const { stage, content } = req.body;
 
-    const workflow = await Workflow.findById(workflowId);
+    // Use workflow from middleware if available
+    const workflow = req.workflow || await Workflow.findById(workflowId);
     if (!workflow) {
       return res.status(404).json({ message: 'Workflow not found' });
     }
@@ -217,18 +232,38 @@ export const addWorkflowNote = async (req, res) => {
   }
 };
 
-// Get all workflows (Level 2 dashboard)
+// Get all workflows (Level 2 dashboard - only assigned workflows)
 export const getMyWorkflows = async (req, res) => {
   try {
-    const workflows = await Workflow.find({ 
-      assignedTo: req.user.id,
-      status: 'ACTIVE'
-    })
-      .populate('signalement')
-      .populate('assignedTo', 'name email')
-      .sort({ createdAt: -1 });
+    // Level 2 can only see workflows assigned to them
+    if (req.user.role === 'LEVEL2') {
+      const workflows = await Workflow.find({ 
+        assignedTo: req.user.id,
+        status: 'ACTIVE'
+      })
+        .populate('signalement')
+        .populate('assignedTo', 'name email')
+        .sort({ createdAt: -1 });
 
-    res.json(workflows);
+      res.json(workflows);
+    } else if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
+      // Level 3/4 can view all workflows but with read-only indicator
+      const workflows = await Workflow.find({ status: 'ACTIVE' })
+        .populate('signalement')
+        .populate('assignedTo', 'name email')
+        .sort({ createdAt: -1 });
+
+      const workflowsWithPermissions = workflows.map(w => ({
+        ...w.toObject(),
+        readOnly: true,
+        canEdit: false,
+        allowedActions: ['view', 'closure-decision']
+      }));
+
+      res.json(workflowsWithPermissions);
+    } else {
+      res.status(403).json({ message: 'Access denied' });
+    }
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
