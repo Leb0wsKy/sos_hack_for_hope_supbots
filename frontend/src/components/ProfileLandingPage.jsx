@@ -408,8 +408,8 @@ function ProfileLandingPage({ onCreateSignalement }) {
                 </div>
               </div>
 
-              {/* Child Name (if not anonymous) */}
-              {selectedSignalement.childName && !selectedSignalement.isAnonymous && (
+              {/* Child Name (always visible) */}
+              {selectedSignalement.childName && (
                 <div>
                   <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-2">Nom de l'enfant</p>
                   <p className="text-sm font-bold text-sos-navy">
@@ -418,8 +418,8 @@ function ProfileLandingPage({ onCreateSignalement }) {
                 </div>
               )}
 
-              {/* Abuser Name (if not anonymous) */}
-              {selectedSignalement.abuserName && !selectedSignalement.isAnonymous && (
+              {/* Abuser Name (always visible) */}
+              {selectedSignalement.abuserName && (
                 <div>
                   <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-2">Agresseur présumé</p>
                   <p className="text-sm font-bold text-sos-navy">
@@ -433,7 +433,7 @@ function ProfileLandingPage({ onCreateSignalement }) {
                 <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <AlertCircle className="w-5 h-5 text-amber-600" />
                   <span className="text-sm font-semibold text-amber-800">
-                    Signalement anonyme - Identités protégées
+                    Signalement anonyme — Identité du déclarant protégée
                   </span>
                 </div>
               )}

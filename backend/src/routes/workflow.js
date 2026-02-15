@@ -9,7 +9,8 @@ import {
   getMyWorkflows,
   escalateSignalement,
   closeWorkflow,
-  markDpeGenerated
+  markDpeGenerated,
+  downloadWorkflowAttachment
 } from '../controllers/workflowController.js';
 import { protect } from '../middleware/auth.js';
 import { requireLevel2, checkWorkflowAssignment } from '../middleware/roles.js';
@@ -24,6 +25,9 @@ router.use(requireLevel2);
 
 // Download predefined templates (rapport-initial / rapport-final)
 router.get('/templates/:templateName', downloadTemplate);
+
+// Download workflow stage attachment (Director + National + SuperAdmin)
+router.get('/:workflowId/stages/:stage/attachments/:filename', downloadWorkflowAttachment);
 
 // Get my workflows (dashboard)
 router.get('/my-workflows', logAudit('VIEW_SIGNALEMENT'), getMyWorkflows);

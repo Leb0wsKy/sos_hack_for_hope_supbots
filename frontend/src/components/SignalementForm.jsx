@@ -147,10 +147,9 @@ function SignalementForm({ onBack, onSuccess }) {
       if (form.program) fd.append('program', form.program);
       if (form.incidentType) fd.append('incidentType', form.incidentType);
       if (form.urgencyLevel) fd.append('urgencyLevel', form.urgencyLevel);
-      if (!form.isAnonymous) {
-        if (form.childName) fd.append('childName', form.childName);
-        if (form.abuserName) fd.append('abuserName', form.abuserName);
-      }
+      // Always send child/abuser names — anonymous only hides the reporter
+      if (form.childName) fd.append('childName', form.childName);
+      if (form.abuserName) fd.append('abuserName', form.abuserName);
       files.forEach((f) => fd.append('attachments', f));
 
       await createSignalement(fd);
@@ -232,7 +231,7 @@ function SignalementForm({ onBack, onSuccess }) {
               <div>
                 <p className="text-sm font-bold text-sos-navy">Signalement anonyme</p>
                 <p className="text-xs text-sos-gray-600">
-                  Les noms ne seront pas enregistrés
+                  Votre identité ne sera pas visible
                 </p>
               </div>
             </div>
@@ -309,12 +308,11 @@ function SignalementForm({ onBack, onSuccess }) {
             </div>
           </fieldset>
 
-          {/* ── Section: People (hidden if anonymous) ── */}
-          {!form.isAnonymous && (
-            <fieldset className="space-y-4 animate-fade-in">
-              <legend className="text-sm font-bold text-sos-gray-700 uppercase tracking-wide mb-2">
-                Personnes concernées
-              </legend>
+          {/* ── Section: People (always visible — anonymous only hides the reporter) ── */}
+          <fieldset className="space-y-4 animate-fade-in">
+            <legend className="text-sm font-bold text-sos-gray-700 uppercase tracking-wide mb-2">
+              Personnes concernées
+            </legend>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-sos-gray-700 mb-1">
@@ -346,7 +344,6 @@ function SignalementForm({ onBack, onSuccess }) {
                 </div>
               </div>
             </fieldset>
-          )}
 
           {/* ── Section: Incident ── */}
           <fieldset className="space-y-4">

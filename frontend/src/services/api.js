@@ -107,18 +107,23 @@ export const submitDPEDraft = (signalementId) =>
   api.post(`/dpe/${signalementId}/submit`);
 
 // Director Village — sign & forward
-export const directorSignDossier = (id, signatureType, signatureImage) => {
+export const directorSignDossier = (id, signatureType, target, signatureImage) => {
   if (signatureImage) {
     const fd = new FormData();
     fd.append('signatureType', 'IMAGE');
+    fd.append('target', target);
     fd.append('signatureImage', signatureImage);
     return api.post(`/signalements/${id}/director/sign`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   }
-  return api.post(`/signalements/${id}/director/sign`, { signatureType: signatureType || 'STAMP' });
+  return api.post(`/signalements/${id}/director/sign`, { signatureType: signatureType || 'STAMP', target });
 };
 
 export const directorForwardDossier = (id) =>
   api.post(`/signalements/${id}/director/forward`);
+
+// Download workflow stage attachment
+export const downloadWorkflowAttachment = (workflowId, stage, filename) =>
+  api.get(`/workflows/${workflowId}/stages/${stage}/attachments/${filename}`, { responseType: 'blob' });
 
 // Analytics (Level 3)
 export const getAnalytics = () => api.get('/analytics');
