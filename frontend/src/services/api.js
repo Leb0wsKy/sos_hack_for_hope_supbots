@@ -51,6 +51,12 @@ export const getSignalements = () => api.get('/signalements');
 export const sauvegarderSignalement = (id) => 
   api.put(`/signalements/${id}/sauvegarder`);
 
+export const markSignalementFaux = (id) =>
+  api.put(`/signalements/${id}/faux`);
+
+export const downloadAttachment = (signalementId, filename) =>
+  api.get(`/signalements/${signalementId}/attachments/${filename}`, { responseType: 'blob' });
+
 // Workflow endpoints
 export const createWorkflow = (signalementId) =>
   api.post('/workflows', { signalementId });

@@ -10,6 +10,7 @@ import {
   assignSignalement,
   downloadAttachment,
   sauvegarderSignalement,
+  markAsFaux,
   getMySignalementsWithDeadlines
 } from '../controllers/signalementController.js';
 import { protect } from '../middleware/auth.js';
@@ -83,6 +84,13 @@ router.put('/:id/sauvegarder',
   requireLevel2,
   logAudit('SAUVEGARDER_SIGNALEMENT', 'Signalement'),
   sauvegarderSignalement
+);
+
+// Mark signalement as fausse alarme (Level 2 — direct reject)
+router.put('/:id/faux',
+  requireLevel2,
+  logAudit('MARK_FAUX_SIGNALEMENT', 'Signalement'),
+  markAsFaux
 );
 
 // Close signalement (Level 3 only - governance operation)

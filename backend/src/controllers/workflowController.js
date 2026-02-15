@@ -305,16 +305,53 @@ export const classifySignalement = async (req, res) => {
     }
 
     workflow.classification = classification;
-    await workflow.save();
 
     const signalement = await Signalement.findById(workflow.signalement._id);
     signalement.classification = classification;
     signalement.classifiedBy = req.user.id;
     signalement.classifiedAt = new Date();
-    if (classification === 'FAUX_SIGNALEMENT') {
+
+    const now = new Date();
+
+    if (classification === 'SAUVEGARDE') {
+      // Full 6-step workflow continues — nothing extra to do
+    } else if (classification === 'PRISE_EN_CHARGE') {
+      // Acknowledged / minor — no workflow treatment needed
+      workflow.status = 'COMPLETED';
+      workflow.currentStage = 'COMPLETED';
+      workflow.closedBy = req.user.id;
+      workflow.closedAt = now;
+      workflow.closureReason = 'Prise en charge — signalement mineur, pas de workflow requis.';
+      signalement.status = 'CLOTURE';
+      signalement.closedBy = req.user.id;
+      signalement.closedAt = now;
+      signalement.closureReason = 'Prise en charge — traitement direct sans workflow.';
+    } else if (classification === 'FAUX_SIGNALEMENT') {
+      // Fake report — archive workflow, mark signalement
+      workflow.status = 'ARCHIVED';
+      workflow.currentStage = 'COMPLETED';
+      workflow.closedBy = req.user.id;
+      workflow.closedAt = now;
+      workflow.closureReason = 'Faux signalement identifié.';
       signalement.status = 'FAUX_SIGNALEMENT';
+      signalement.closedBy = req.user.id;
+      signalement.closedAt = now;
+      signalement.closureReason = 'Faux signalement identifié par le psychologue.';
     }
+
+    await workflow.save();
     await signalement.save();
+
+    // Notify Level 1 creator for prise en charge / faux
+    if (classification !== 'SAUVEGARDE') {
+      emitEvent('signalement.closed', {
+        id: signalement._id,
+        closedBy: req.user.id,
+        classification,
+        village: signalement.village,
+        createdBy: signalement.createdBy
+      });
+    }
 
     emitEvent('signalement.classified', {
       id: signalement._id,

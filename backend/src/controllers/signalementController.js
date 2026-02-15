@@ -463,10 +463,9 @@ export const downloadAttachment = async (req, res) => {
     }
 
     if (req.user.role === 'LEVEL2') {
-      const isAssigned = signalement.assignedTo &&
-        signalement.assignedTo.toString() === req.user.id;
-
-      if (!isAssigned) {
+      // For EN_ATTENTE signalements, village scope check is enough
+      // For assigned signalements, verify the user is the assignee
+      if (signalement.assignedTo && signalement.assignedTo.toString() !== req.user.id) {
         return res.status(403).json({ message: 'Access denied' });
       }
     }
@@ -492,6 +491,46 @@ export const downloadAttachment = async (req, res) => {
     // Stream file to response
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Mark signalement as fausse alarme (Level 2 — direct reject without workflow)
+export const markAsFaux = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const signalement = await Signalement.findById(id);
+    if (!signalement) {
+      return res.status(404).json({ message: 'Signalement not found' });
+    }
+
+    if (signalement.status !== 'EN_ATTENTE') {
+      return res.status(400).json({
+        message: 'Seuls les signalements EN_ATTENTE peuvent être marqués comme fausse alarme.'
+      });
+    }
+
+    signalement.status = 'FAUX_SIGNALEMENT';
+    signalement.classification = 'FAUX_SIGNALEMENT';
+    signalement.closedBy = req.user.id;
+    signalement.closedAt = new Date();
+    signalement.closureReason = 'Fausse alarme — classé sans workflow';
+    await signalement.save();
+
+    await signalement.populate('village', 'name location region');
+    await signalement.populate('createdBy', 'name email role');
+
+    // Notify the Level 1 creator
+    const { emitEvent } = await import('../services/socket.js');
+    emitEvent('signalement.closed', {
+      id: signalement._id,
+      status: 'FAUX_SIGNALEMENT',
+      closedBy: req.user.id,
+      village: signalement.village
+    });
+
+    res.json({ message: 'Signalement marqué comme fausse alarme.', signalement });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

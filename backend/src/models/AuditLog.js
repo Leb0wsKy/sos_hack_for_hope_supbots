@@ -29,7 +29,19 @@ const auditLogSchema = new mongoose.Schema({
       'CREATE_VILLAGE',
       'UPDATE_VILLAGE',
       'ACCESS_ANALYTICS',
-      'EXPORT_DATA'
+      'EXPORT_DATA',
+      'DOWNLOAD_ATTACHMENT',
+      'SAUVEGARDER_SIGNALEMENT',
+      'MARK_FAUX_SIGNALEMENT',
+      'CLOSE_WORKFLOW',
+      'GENERATE_DPE',
+      'VIEW_DPE',
+      'UPDATE_DPE',
+      'SUBMIT_DPE',
+      'SAVE_DPE_REPORT',
+      'VIEW_NOTIFICATIONS',
+      'MARK_NOTIFICATION_READ',
+      'VIEW_SIGNALEMENTS'
     ]
   },
   targetModel: {
