@@ -20,9 +20,13 @@ const stageSchema = {
   isOverdue: { type: Boolean, default: false }
 };
 
-/* ─── Workflow — simplified 2-stage model ───
- *  Stage 1: initialReport  (Rapport Initial)  — 24 h deadline from sauvegarder
- *  Stage 2: finalReport    (Rapport Final)    — 48 h deadline from step-1 completion
+/* ─── Workflow — 6-stage document model ───
+ *  Stage 1: ficheInitiale       (Fiche Initiale)        — 24 h deadline
+ *  Stage 2: rapportDpe          (Rapport DPE – IA)      — AI-generated then validated
+ *  Stage 3: evaluationComplete  (Évaluation Complète)   — 48 h after stage 2
+ *  Stage 4: planAction          (Plan d'Action)          — 48 h after stage 3
+ *  Stage 5: rapportSuivi        (Rapport de Suivi)       — 72 h after stage 4
+ *  Stage 6: rapportFinal        (Rapport Final)          — 48 h after stage 5
  */
 const workflowSchema = new mongoose.Schema({
   signalement: {
@@ -42,22 +46,43 @@ const workflowSchema = new mongoose.Schema({
     default: null
   },
 
-  /* ── Two-step document workflow ── */
+  /* ── Six-step document workflow ── */
   stages: {
-    initialReport: stageSchema,
-    finalReport: stageSchema
+    ficheInitiale:      stageSchema,
+    rapportDpe:         stageSchema,
+    evaluationComplete: stageSchema,
+    planAction:         stageSchema,
+    rapportSuivi:       stageSchema,
+    rapportFinal:       stageSchema
   },
+
+  /* Track whether DPE AI draft was generated */
+  dpeGenerated: { type: Boolean, default: false },
+  dpeGeneratedAt: Date,
 
   currentStage: {
     type: String,
-    enum: ['INITIAL', 'FINAL_REPORT', 'COMPLETED'],
-    default: 'INITIAL'
+    enum: [
+      'FICHE_INITIALE',
+      'RAPPORT_DPE',
+      'EVALUATION_COMPLETE',
+      'PLAN_ACTION',
+      'RAPPORT_SUIVI',
+      'RAPPORT_FINAL',
+      'COMPLETED'
+    ],
+    default: 'FICHE_INITIALE'
   },
   status: {
     type: String,
     enum: ['ACTIVE', 'SUSPENDED', 'COMPLETED', 'ARCHIVED'],
     default: 'ACTIVE'
   },
+
+  /* ── Closure tracking ── */
+  closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  closedAt: Date,
+  closureReason: String,
 
   /* ── Penalty / overdue tracking ── */
   penalties: [{

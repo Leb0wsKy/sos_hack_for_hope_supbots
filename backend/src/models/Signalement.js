@@ -198,6 +198,12 @@ const signalementSchema = new mongoose.Schema({
     }]
   },
   
+  // Reference to the separate Workflow document (Level 2)
+  workflowRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workflow'
+  },
+
   // Assignment (Level 2)
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,

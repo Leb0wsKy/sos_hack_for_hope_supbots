@@ -21,8 +21,13 @@ import {
   getSignalements,
   sauvegarderSignalement,
   createWorkflow,
+  getWorkflow,
   updateWorkflowStage,
   classifySignalement as classifyAPI,
+  downloadTemplate,
+  generateDPE,
+  markDpeGenerated,
+  closeWorkflow,
 } from '../services/api';
 
 /* ═══════════════════════════════════════════════════════
@@ -57,18 +62,21 @@ const CLASSIFICATION_OPTIONS = [
 ];
 
 /**
- * Ordered mapping: camelCase stage key → enum value.
- * The backend `updateWorkflowStage` expects the camelCase key in `req.body.stage`,
- * while `workflow.currentStage` stores the enum value after completion.
+ * Six-stage document workflow matching backend model:
+ *  1. ficheInitiale       — Fiche Initiale           — 24h
+ *  2. rapportDpe          — Rapport DPE (IA)         — AI-generated
+ *  3. evaluationComplete  — Évaluation Complète      — 48h
+ *  4. planAction          — Plan d'Action            — 48h
+ *  5. rapportSuivi        — Rapport de Suivi         — 72h
+ *  6. rapportFinal        — Rapport Final            — 48h
  */
 const STAGE_ORDER = [
-  { key: 'initialReport', enum: 'INITIAL', label: 'Rapport initial' },
-  { key: 'dpeReport', enum: 'DPE', label: 'Rapport DPE' },
-  { key: 'evaluation', enum: 'EVALUATION', label: 'Évaluation' },
-  { key: 'actionPlan', enum: 'ACTION_PLAN', label: 'Plan d\'action' },
-  { key: 'followUpReport', enum: 'FOLLOW_UP', label: 'Suivi' },
-  { key: 'finalReport', enum: 'FINAL_REPORT', label: 'Rapport final' },
-  { key: 'closureNotice', enum: 'CLOSURE', label: 'Clôture' },
+  { key: 'ficheInitiale',      enum: 'FICHE_INITIALE',      label: 'Fiche Initiale',       template: 'fiche-initiale',      isDpe: false },
+  { key: 'rapportDpe',         enum: 'RAPPORT_DPE',         label: 'Rapport DPE (IA)',     template: 'rapport-dpe',         isDpe: true },
+  { key: 'evaluationComplete', enum: 'EVALUATION_COMPLETE', label: 'Évaluation Complète',  template: 'evaluation-complete', isDpe: false },
+  { key: 'planAction',         enum: 'PLAN_ACTION',         label: 'Plan d\'Action',        template: 'plan-action',         isDpe: false },
+  { key: 'rapportSuivi',       enum: 'RAPPORT_SUIVI',       label: 'Rapport de Suivi',     template: 'rapport-suivi',       isDpe: false },
+  { key: 'rapportFinal',       enum: 'RAPPORT_FINAL',       label: 'Rapport Final',        template: 'rapport-final',       isDpe: false },
 ];
 
 /** Returns the next uncompleted stage, or null if all done. */
@@ -255,16 +263,20 @@ const SignalementCard = ({ item, onSelect }) => {
         </span>
         <span>{item.village?.name || ''}</span>
       </div>
-      {/* Workflow stage — only show if the workflow has real stages */}
-      {item.workflow?.stages && Object.keys(item.workflow.stages).length > 0 && (
-        <div className="mt-2 pt-2 border-t border-sos-gray-100 flex items-center gap-1.5 text-xs text-sos-blue">
-          <ClipboardList className="w-3.5 h-3.5" />
-          {(() => {
-            const next = getNextStage(item.workflow);
-            return next ? next.label : 'Terminé';
-          })()}
-        </div>
-      )}
+      {/* Workflow stage indicator */}
+      {(() => {
+        const wfData = item.workflowRef || item.workflow;
+        if (wfData && typeof wfData === 'object' && wfData.currentStage) {
+          const stageDef = STAGE_ORDER.find((s) => s.enum === wfData.currentStage);
+          return (
+            <div className="mt-2 pt-2 border-t border-sos-gray-100 flex items-center gap-1.5 text-xs text-sos-blue">
+              <ClipboardList className="w-3.5 h-3.5" />
+              {wfData.status === 'COMPLETED' ? 'Workflow terminé' : stageDef ? stageDef.label : wfData.currentStage}
+            </div>
+          );
+        }
+        return null;
+      })()}
       {/* Arrow on hover */}
       <div className="flex justify-end mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <ArrowUpRight className="w-4 h-4 text-sos-blue" />
@@ -277,16 +289,39 @@ const SignalementCard = ({ item, onSelect }) => {
 const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [actionLoading, setActionLoading] = useState('');
   const [stageContent, setStageContent] = useState('');
+  const [stageFiles, setStageFiles] = useState([]);
+  const [workflow, setWorkflow] = useState(null);
+  const [loadingWf, setLoadingWf] = useState(false);
+  const [dpeResult, setDpeResult] = useState(null);
+
+  // Fetch the real Workflow document from the backend
+  const fetchWorkflow = useCallback(async () => {
+    if (!item?._id) return;
+    setLoadingWf(true);
+    try {
+      const { data } = await getWorkflow(item._id);
+      setWorkflow(data);
+    } catch {
+      setWorkflow(null);
+    }
+    setLoadingWf(false);
+  }, [item?._id]);
+
+  // Fetch workflow on mount / item change
+  useEffect(() => {
+    if (item && (item.status === 'EN_COURS' || item.workflowRef || item.workflow)) {
+      fetchWorkflow();
+    } else {
+      setWorkflow(null);
+    }
+  }, [item?._id, fetchWorkflow]);
 
   if (!item) return null;
 
-  // The embedded workflow always exists in the schema (with defaults), so check if it has
-  // meaningful progress (at least one step) to consider it "active".
-  const hasActiveWorkflow = item.workflow && typeof item.workflow === 'object'
-    && item.workflow.stages && Object.keys(item.workflow.stages).length > 0;
-  const wf = hasActiveWorkflow ? item.workflow : null;
-  const nextStage = wf ? getNextStage(wf) : null;
   const alreadySauvegarded = !!item.sauvegardedAt;
+
+  const wf = workflow;
+  const nextStage = wf ? getNextStage(wf) : null;
 
   const handleSauvegarder = async () => {
     setActionLoading('sauv');
@@ -337,9 +372,13 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const handleCreateWorkflow = async () => {
     setActionLoading('wf');
     try {
-      await createWorkflow({ signalementId: item._id });
+      await createWorkflow(item._id);
+      await fetchWorkflow();
       onRefresh();
-    } catch { /* ignore */ }
+    } catch (error) {
+      console.error('Create workflow failed:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la création du workflow');
+    }
     setActionLoading('');
   };
 
@@ -347,23 +386,97 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     if (!wf?._id) return;
     setActionLoading('cls');
     try {
-      await classifyAPI(wf._id, { classification });
+      await classifyAPI(wf._id, classification);
+      await fetchWorkflow();
       onRefresh();
-    } catch { /* ignore */ }
+    } catch (error) {
+      console.error('Classification failed:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la classification');
+    }
     setActionLoading('');
   };
 
   const handleAdvanceStage = async () => {
     if (!wf?._id || !nextStage) return;
+    if (stageFiles.length === 0) {
+      alert('⚠️ Vous devez téléverser au moins un document pour valider cette étape.');
+      return;
+    }
+
+    // For rapportDpe stage, check DPE was generated
+    if (nextStage.isDpe && !wf.dpeGenerated) {
+      alert('⚠️ Vous devez d\'abord générer le Rapport DPE par l\'IA avant de valider cette étape.');
+      return;
+    }
+
     setActionLoading('stage');
-    const fd = new FormData();
-    fd.append('stage', nextStage.key);
-    fd.append('content', stageContent || 'Étape validée');
     try {
+      const fd = new FormData();
+      fd.append('stage', nextStage.key);
+      fd.append('content', stageContent || 'Étape validée');
+      stageFiles.forEach((f) => fd.append('attachments', f));
       await updateWorkflowStage(wf._id, fd);
       setStageContent('');
+      setStageFiles([]);
+      await fetchWorkflow();
       onRefresh();
-    } catch { /* ignore */ }
+    } catch (error) {
+      console.error('Stage advance failed:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la validation de l\'étape');
+    }
+    setActionLoading('');
+  };
+
+  const handleDownloadTemplate = async (templateName) => {
+    try {
+      const { data } = await downloadTemplate(templateName);
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${templateName}.txt`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Template download failed:', error);
+      alert('Erreur lors du téléchargement du template');
+    }
+  };
+
+  /** Generate DPE AI report for the signalement */
+  const handleGenerateDPE = async () => {
+    if (!item?._id || !wf?._id) return;
+    setActionLoading('dpe');
+    setDpeResult(null);
+    try {
+      const { data } = await generateDPE(item._id);
+      setDpeResult(data);
+      // Mark DPE as generated on the workflow
+      await markDpeGenerated(wf._id);
+      await fetchWorkflow();
+      alert(`✅ ${data.message || 'Rapport DPE généré avec succès!'}`);
+    } catch (error) {
+      console.error('DPE generation failed:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la génération du rapport DPE');
+    }
+    setActionLoading('');
+  };
+
+  /** Close the workflow — all 6 stages must be done */
+  const handleCloseWorkflow = async () => {
+    if (!wf?._id) return;
+    const reason = prompt('Raison de clôture (optionnel) :');
+    setActionLoading('close');
+    try {
+      await closeWorkflow(wf._id, reason || undefined);
+      alert('✅ Signalement clôturé avec succès! Le créateur Level 1 a été notifié.');
+      await fetchWorkflow();
+      onRefresh();
+    } catch (error) {
+      console.error('Close workflow failed:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la clôture');
+    }
     setActionLoading('');
   };
 
@@ -468,51 +581,211 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
           {wf && (
             <div>
               <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-3">
-                Progression du workflow
+                Progression du workflow ({completedStageCount(wf)}/{STAGE_ORDER.length})
               </p>
-              {/* Progress bar — based on actual stage completion, not currentStage enum */}
-              <div className="flex items-center gap-1 mb-4">
+              {/* Progress bar — 6 stages */}
+              <div className="flex items-center gap-0.5 mb-4">
                 {STAGE_ORDER.map((stage) => {
                   const done = wf.stages?.[stage.key]?.completed;
                   const active = nextStage?.key === stage.key;
                   return (
-                    <div
-                      key={stage.key}
-                      className={`h-2 flex-1 rounded-full transition-colors ${
-                        done ? 'bg-sos-green' : active ? 'bg-sos-blue' : 'bg-sos-gray-200'
-                      }`}
-                      title={stage.label}
-                    />
+                    <div key={stage.key} className="flex-1 space-y-1">
+                      <div
+                        className={`h-2 rounded-full transition-colors ${
+                          done ? 'bg-sos-green' : active ? 'bg-sos-blue animate-pulse' : 'bg-sos-gray-200'
+                        }`}
+                        title={stage.label}
+                      />
+                      <p className={`text-[9px] text-center font-medium leading-tight ${
+                        done ? 'text-sos-green' : active ? 'text-sos-blue' : 'text-sos-gray-400'
+                      }`}>
+                        {stage.label}
+                        {done && ' ✓'}
+                      </p>
+                    </div>
                   );
                 })}
               </div>
-              <p className="text-sm text-sos-blue font-medium">
-                {nextStage
-                  ? `Étape actuelle : ${nextStage.label}`
-                  : 'Toutes les étapes sont terminées'}
-              </p>
+
+              {/* Current stage info */}
+              {wf.currentStage === 'COMPLETED' || wf.status === 'COMPLETED' ? (
+                <div className="flex items-center gap-2 text-sos-green bg-sos-green-light p-3 rounded-lg">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-sm font-semibold">Toutes les étapes sont terminées</span>
+                </div>
+              ) : nextStage ? (
+                <p className="text-sm text-sos-blue font-medium">
+                  Étape actuelle : {nextStage.label}
+                  {wf.stages?.[nextStage.key]?.dueAt && (
+                    <span className="text-xs text-sos-gray-500 ml-2">
+                      (délai : {new Date(wf.stages[nextStage.key].dueAt).toLocaleString('fr-FR')})
+                    </span>
+                  )}
+                </p>
+              ) : null}
+
+              {/* DPE Generation button — appears when we're on the rapportDpe stage */}
+              {wf.status === 'ACTIVE' && nextStage?.isDpe && !wf.dpeGenerated && (
+                <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                  <p className="text-xs font-semibold text-purple-700">
+                    🤖 Étape IA : Générer le Rapport DPE
+                  </p>
+                  <p className="text-xs text-purple-600">
+                    Cliquez ci-dessous pour générer automatiquement un brouillon DPE à partir des données du signalement.
+                    Vous devrez ensuite téléverser le rapport validé.
+                  </p>
+                  <button
+                    onClick={handleGenerateDPE}
+                    disabled={actionLoading === 'dpe'}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium
+                               hover:bg-purple-700 transition disabled:opacity-60 cursor-pointer"
+                  >
+                    {actionLoading === 'dpe' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                    Générer Rapport DPE
+                  </button>
+                </div>
+              )}
+
+              {/* DPE already generated info */}
+              {wf.dpeGenerated && nextStage?.isDpe && (
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Rapport DPE généré par l'IA
+                    {wf.dpeGeneratedAt && (
+                      <span className="text-green-500 font-normal ml-1">
+                        — {new Date(wf.dpeGeneratedAt).toLocaleString('fr-FR')}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">
+                    Téléversez maintenant le rapport DPE validé pour compléter cette étape.
+                  </p>
+                </div>
+              )}
+
+              {/* DPE generation result preview */}
+              {dpeResult?.draft && (
+                <div className="mt-2 p-3 bg-sos-gray-50 border border-sos-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  <p className="text-xs font-bold text-sos-gray-700 mb-1">Aperçu du brouillon DPE :</p>
+                  <p className="text-xs text-sos-gray-600">{dpeResult.draft.titre}</p>
+                  <p className="text-xs text-sos-gray-500 mt-1">{dpeResult.draft.resume_signalement}</p>
+                </div>
+              )}
 
               {/* Stage content input — only if workflow is active and there is a next stage */}
               {wf.status === 'ACTIVE' && nextStage && (
-                <div className="mt-3 space-y-2">
+                /* For DPE stage, only show upload after DPE is generated */
+                (!nextStage.isDpe || wf.dpeGenerated) && (
+                <div className="mt-3 space-y-3">
+                  {/* Template download */}
+                  {nextStage.template && (
+                    <button
+                      onClick={() => handleDownloadTemplate(nextStage.template)}
+                      className="flex items-center gap-1.5 text-xs text-sos-blue hover:underline"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Télécharger le template : {nextStage.label}
+                    </button>
+                  )}
+
                   <textarea
                     value={stageContent}
                     onChange={(e) => setStageContent(e.target.value)}
-                    placeholder={`Contenu pour : ${nextStage.label}…`}
+                    placeholder={`Notes pour : ${nextStage.label}…`}
                     rows={3}
                     className="w-full px-3 py-2 rounded-lg border border-sos-gray-300 text-sm
                                placeholder:text-sos-gray-400
                                focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue"
                   />
+
+                  {/* File upload */}
+                  <div>
+                    <label className="block text-xs font-medium text-sos-gray-700 mb-1">
+                      Document à téléverser (obligatoire)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.txt,.odt,.jpg,.jpeg,.png"
+                      onChange={(e) => setStageFiles(Array.from(e.target.files))}
+                      className="block w-full text-sm text-sos-gray-600
+                                 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0
+                                 file:text-xs file:font-semibold file:bg-sos-blue-light file:text-sos-blue
+                                 hover:file:bg-sos-blue hover:file:text-white file:transition file:cursor-pointer"
+                    />
+                    {stageFiles.length > 0 && (
+                      <div className="mt-1.5 space-y-1">
+                        {stageFiles.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs text-sos-gray-600">
+                            <FileText className="w-3 h-3" />
+                            <span className="truncate">{f.name}</span>
+                            <span className="text-sos-gray-400">({(f.size / 1024).toFixed(0)} Ko)</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleAdvanceStage}
-                    disabled={actionLoading === 'stage'}
+                    disabled={actionLoading === 'stage' || stageFiles.length === 0}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sos-blue text-white text-sm font-medium
                                hover:bg-sos-blue-dark transition disabled:opacity-60 cursor-pointer"
                   >
                     {actionLoading === 'stage' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                     Valider : {nextStage.label}
                   </button>
+                </div>
+                )
+              )}
+
+              {/* Closure button — only when all 6 stages are COMPLETED */}
+              {(wf.currentStage === 'COMPLETED' || completedStageCount(wf) === STAGE_ORDER.length) && wf.status === 'ACTIVE' && (
+                <div className="mt-4 p-3 bg-sos-green-light border border-green-200 rounded-lg space-y-2">
+                  <p className="text-sm font-semibold text-sos-green flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Toutes les 6 étapes sont complétées
+                  </p>
+                  <p className="text-xs text-sos-gray-600">
+                    Vous pouvez maintenant clôturer ce signalement. Une notification sera envoyée au créateur Level 1.
+                  </p>
+                  <button
+                    onClick={handleCloseWorkflow}
+                    disabled={actionLoading === 'close'}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sos-green text-white text-sm font-medium
+                               hover:bg-green-700 transition disabled:opacity-60 cursor-pointer"
+                  >
+                    {actionLoading === 'close' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Clôturer le signalement
+                  </button>
+                </div>
+              )}
+
+              {/* Already closed */}
+              {wf.status === 'COMPLETED' && wf.closedAt && (
+                <div className="mt-3 p-3 bg-sos-green-light border border-green-200 rounded-lg">
+                  <p className="text-xs font-semibold text-sos-green flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Clôturé le {new Date(wf.closedAt).toLocaleString('fr-FR')}
+                  </p>
+                  {wf.closureReason && (
+                    <p className="text-xs text-sos-gray-600 mt-1">Raison : {wf.closureReason}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Penalties / overdue info */}
+              {wf.penalties?.length > 0 && (
+                <div className="mt-3 p-2 bg-sos-red-light rounded-lg">
+                  <p className="text-xs font-semibold text-sos-red">
+                    ⚠️ {wf.penalties.length} pénalité{wf.penalties.length > 1 ? 's' : ''} de retard
+                  </p>
+                  {wf.penalties.map((p, i) => (
+                    <p key={i} className="text-[10px] text-sos-red mt-0.5">
+                      {p.stage}: {p.delayHours}h de retard
+                    </p>
+                  ))}
                 </div>
               )}
             </div>
@@ -561,8 +834,8 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                 Sauvegarder (prendre en charge)
               </button>
             )}
-            {/* Create workflow button: visible when sauvegarded but no active workflow */}
-            {!wf && alreadySauvegarded && item.status === 'EN_COURS' && (
+            {/* Create workflow button: visible when sauvegarded but no workflow yet */}
+            {!wf && !loadingWf && alreadySauvegarded && item.status === 'EN_COURS' && (
               <button
                 onClick={handleCreateWorkflow}
                 disabled={actionLoading === 'wf'}
@@ -570,9 +843,15 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                            bg-sos-blue text-white text-sm font-semibold
                            hover:bg-sos-blue-dark transition disabled:opacity-60 cursor-pointer"
               >
-                {actionLoading === 'wf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                Créer un workflow
+                {actionLoading === 'wf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                Démarrer le workflow
               </button>
+            )}
+            {loadingWf && (
+              <div className="flex items-center justify-center py-2">
+                <Loader2 className="w-4 h-4 animate-spin text-sos-blue" />
+                <span className="ml-2 text-xs text-sos-gray-500">Chargement du workflow...</span>
+              </div>
             )}
           </div>
         </div>

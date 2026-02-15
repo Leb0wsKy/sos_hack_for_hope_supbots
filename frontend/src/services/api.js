@@ -1,16 +1,15 @@
 import axios from 'axios';
 
-/* Use a relative path so requests go through Vite's dev-server proxy
-   (see vite.config.js  →  /api  →  http://localhost:5000).
-   This avoids CORS issues and works in production behind a reverse proxy. */
+const API_URL = 'http://localhost:5000/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Attach JWT on every request
+// JWT token interceptor
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -38,54 +37,69 @@ export const login = (email, password) =>
 
 export const getProfile = () => api.get('/auth/profile');
 
-/* ── Villages ── */
+// Villages
 export const getVillages = () => api.get('/villages');
-export const getVillageById = (id) => api.get(`/villages/${id}`);
-export const getVillageStatistics = (id) => api.get(`/villages/${id}/statistics`);
 
-/* ── Signalements ── */
-export const createSignalement = (formData) =>
+// Signalements
+export const createSignalement = (formData) => 
   api.post('/signalements', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
 
-export const getSignalements = (params) => api.get('/signalements', { params });
-export const getSignalementById = (id) => api.get(`/signalements/${id}`);
-export const updateSignalement = (id, data) => api.put(`/signalements/${id}`, data);
-export const assignSignalement = (id, data) => api.put(`/signalements/${id}/assign`, data);
-export const sauvegarderSignalement = (id) => api.put(`/signalements/${id}/sauvegarder`);
-export const closeSignalement = (id, data) => api.put(`/signalements/${id}/close`, data);
-export const archiveSignalement = (id) => api.put(`/signalements/${id}/archive`);
-export const getMyDeadlines = () => api.get('/signalements/my-deadlines');
+export const getSignalements = () => api.get('/signalements');
 
-/* ── Workflows ── */
-export const getMyWorkflows = () => api.get('/workflows/my-workflows');
-export const getWorkflow = (signalementId) => api.get(`/workflows/${signalementId}`);
-export const createWorkflow = (data) => api.post('/workflows', data);
+export const sauvegarderSignalement = (id) => 
+  api.put(`/signalements/${id}/sauvegarder`);
+
+// Workflow endpoints
+export const createWorkflow = (signalementId) =>
+  api.post('/workflows', { signalementId });
+
+export const getWorkflow = (signalementId) =>
+  api.get(`/workflows/${signalementId}`);
+
 export const updateWorkflowStage = (workflowId, formData) =>
   api.put(`/workflows/${workflowId}/stage`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
-export const classifySignalement = (workflowId, data) =>
-  api.put(`/workflows/${workflowId}/classify`, data);
-export const escalateSignalement = (workflowId, data) =>
-  api.put(`/workflows/${workflowId}/escalate`, data);
-export const addWorkflowNote = (workflowId, data) =>
-  api.post(`/workflows/${workflowId}/notes`, data);
+
+export const classifySignalement = (workflowId, classification) =>
+  api.put(`/workflows/${workflowId}/classify`, { classification });
+
+export const escalateSignalement = (workflowId, escalatedTo) =>
+  api.put(`/workflows/${workflowId}/escalate`, { escalatedTo });
+
+export const addWorkflowNote = (workflowId, content) =>
+  api.post(`/workflows/${workflowId}/notes`, { content });
+
 export const downloadTemplate = (templateName) =>
   api.get(`/workflows/templates/${templateName}`, { responseType: 'blob' });
 
-/* ── Analytics ── */
-export const getAnalytics = (params) => api.get('/analytics', { params });
-export const getHeatmapData = () => api.get('/analytics/heatmap');
-export const getVillageRatings = () => api.get('/analytics/village-ratings');
-export const exportData = (params) =>
-  api.get('/analytics/export', { params });
+export const markDpeGenerated = (workflowId) =>
+  api.put(`/workflows/${workflowId}/dpe-generated`);
 
-/* ── Admin (Level 4) ── */
-export const getAdminUsers = (params) => api.get('/admin/users', { params });
-export const createAdminUser = (data) => api.post('/admin/users', data);
-export const updateUserStatus = (id, data) => api.put(`/admin/users/${id}/status`, data);
-export const resetUserPassword = (id, data) => api.put(`/admin/users/${id}/reset-password`, data);
+export const closeWorkflow = (workflowId, reason) =>
+  api.put(`/workflows/${workflowId}/close`, { reason });
+
+// DPE AI generation endpoints
+export const generateDPE = (signalementId) =>
+  api.post(`/dpe/${signalementId}/generate`);
+
+export const getDPEDraft = (signalementId) =>
+  api.get(`/dpe/${signalementId}`);
+
+export const submitDPEDraft = (signalementId) =>
+  api.post(`/dpe/${signalementId}/submit`);
+
+// Analytics (Level 3)
+export const getAnalytics = () => api.get('/analytics');
+export const getVillageRatings = () => api.get('/analytics/village-ratings');
+export const exportData = (params) => api.get('/analytics/export', { params, responseType: 'blob' });
+
+// Admin (Level 4)
+export const getAdminUsers = () => api.get('/admin/users');
+export const createAdminUser = (userData) => api.post('/admin/users', userData);
+export const updateUserStatus = (id, status) => api.put(`/admin/users/${id}/status`, status);
+export const resetUserPassword = (id) => api.put(`/admin/users/${id}/reset-password`);
 
 export default api;

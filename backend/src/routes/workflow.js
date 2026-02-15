@@ -7,7 +7,9 @@ import {
   classifySignalement,
   addWorkflowNote,
   getMyWorkflows,
-  escalateSignalement
+  escalateSignalement,
+  closeWorkflow,
+  markDpeGenerated
 } from '../controllers/workflowController.js';
 import { protect } from '../middleware/auth.js';
 import { requireLevel2, checkWorkflowAssignment } from '../middleware/roles.js';
@@ -62,6 +64,22 @@ router.post(
   checkWorkflowAssignment,
   logAudit('UPDATE_WORKFLOW', 'Workflow'),
   addWorkflowNote
+);
+
+// Mark DPE as generated (assignment checked)
+router.put(
+  '/:workflowId/dpe-generated',
+  checkWorkflowAssignment,
+  logAudit('UPDATE_WORKFLOW', 'Workflow'),
+  markDpeGenerated
+);
+
+// Close workflow — all 6 stages must be done (assignment checked)
+router.put(
+  '/:workflowId/close',
+  checkWorkflowAssignment,
+  logAudit('CLOSE_WORKFLOW', 'Workflow'),
+  closeWorkflow
 );
 
 export default router;

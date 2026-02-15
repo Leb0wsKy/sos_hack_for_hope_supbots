@@ -1,0 +1,82 @@
+=====================================
+RAPPORT DPE — Diagnostic Psycho-Éducatif
+SOS Villages d'Enfants Tunisie
+=====================================
+
+Date : ___/___/______
+Réf. Signalement : ___________________________
+Village SOS : ___________________________
+Psychologue : ___________________________
+
+───────────────────────────────────────
+1. INFORMATIONS GÉNÉRALES
+───────────────────────────────────────
+Nom de l'enfant (ou code anonyme) : ___________________________
+Âge : _____
+Programme : ___________________________
+Date du signalement : ___/___/______
+Type d'incident : ___________________________
+Niveau d'urgence : ☐ Faible  ☐ Moyen  ☐ Élevé  ☐ Critique
+
+───────────────────────────────────────
+2. RÉSUMÉ DU SIGNALEMENT
+───────────────────────────────────────
+[Résumé concis de la situation signalée]
+
+
+───────────────────────────────────────
+3. CONTEXTE
+───────────────────────────────────────
+[Contexte familial, environnemental et éducatif]
+
+
+───────────────────────────────────────
+4. OBSERVATIONS CLINIQUES
+───────────────────────────────────────
+[Observations du psychologue lors des entretiens]
+
+
+───────────────────────────────────────
+5. ÉVALUATION DU RISQUE
+───────────────────────────────────────
+Niveau de risque : ☐ Faible  ☐ Moyen  ☐ Élevé
+Justification :
+
+
+───────────────────────────────────────
+6. RECOMMANDATIONS
+───────────────────────────────────────
+1.
+2.
+3.
+
+───────────────────────────────────────
+7. PLAN D'ACTION PRÉLIMINAIRE
+───────────────────────────────────────
+| Action | Responsable | Délai |
+|--------|-------------|-------|
+|        |             |       |
+|        |             |       |
+
+───────────────────────────────────────
+8. SUIVI RECOMMANDÉ
+───────────────────────────────────────
+[Plan de suivi proposé]
+
+
+───────────────────────────────────────
+9. POINTS À VÉRIFIER
+───────────────────────────────────────
+☐
+☐
+☐
+
+───────────────────────────────────────
+SIGNATURE
+───────────────────────────────────────
+Nom : ___________________________
+Fonction : Psychologue
+Date : ___/___/______
+Signature : ___________________________
+
+AVERTISSEMENT : Ce rapport est généré à titre de brouillon. Il doit être validé par un professionnel qualifié.

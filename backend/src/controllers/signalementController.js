@@ -176,21 +176,20 @@ export const getSignalements = async (req, res) => {
       // Level 1 only sees their own village's reports
       filter.village = req.user.village?._id || req.user.village;
     } else if (req.user.role === 'LEVEL2') {
-      // Level 2 can see signalements from their village or assigned to them
+      // Level 2 sees ALL signalements from their village + any assigned to them
       console.log('Level 2 filtering - User:', req.user.id, 'Village:', req.user.village);
       
-      // Simplified filtering: Level 2 sees unassigned signalements from their village + their own assigned ones
       const userVillage = req.user.village?._id || req.user.village;
       
       if (userVillage) {
         filter.$or = [
-          { status: 'EN_ATTENTE', village: userVillage }, // Unassigned from their village
-          { assignedTo: req.user.id } // Their assigned signalements
+          { village: userVillage },        // All from their village (any status)
+          { assignedTo: req.user.id }      // Their assigned signalements (any village)
         ];
       } else {
         // If no specific village, see all unassigned + their assigned
         filter.$or = [
-          { status: 'EN_ATTENTE', assignedTo: null },
+          { assignedTo: { $in: [null, undefined] } },
           { assignedTo: req.user.id }
         ];
       }
@@ -211,6 +210,7 @@ export const getSignalements = async (req, res) => {
       .populate('assignedTo', 'name email')
       .populate('classifiedBy', 'name')
       .populate('workflow', 'currentStage status stages assignedTo classification')
+      .populate('workflowRef', 'currentStage status stages assignedTo classification')
       .sort({ createdAt: -1 });
 
     const masked = signalements.map(maskAnonymousSignalement);
@@ -229,7 +229,8 @@ export const getSignalementById = async (req, res) => {
       .populate('village', 'name location region')
       .populate('assignedTo', 'name email role')
       .populate('classifiedBy', 'name')
-      .populate('workflow');
+      .populate('workflow')
+      .populate('workflowRef');
 
     if (!signalement) {
       return res.status(404).json({ message: 'Signalement not found' });
@@ -533,7 +534,7 @@ export const sauvegarderSignalement = async (req, res) => {
     signalement.sauvegardedAt = now;
     signalement.deadlineAt = initialDeadline;
 
-    // Auto-create workflow with deadlines
+    // Auto-create workflow with 6-stage deadlines
     const Workflow = (await import('../models/Workflow.js')).default;
     let workflow = await Workflow.findOne({ signalement: id });
     if (!workflow) {
@@ -541,12 +542,16 @@ export const sauvegarderSignalement = async (req, res) => {
         signalement: id,
         assignedTo: req.user.id,
         stages: {
-          initialReport: { dueAt: initialDeadline },
-          finalReport: {}
+          ficheInitiale:      { dueAt: initialDeadline },
+          rapportDpe:         {},
+          evaluationComplete: {},
+          planAction:         {},
+          rapportSuivi:       {},
+          rapportFinal:       {}
         }
       });
       await workflow.save();
-      signalement.workflow = workflow._id;
+      signalement.workflowRef = workflow._id;
     }
 
     await signalement.save();
@@ -563,7 +568,7 @@ export const sauvegarderSignalement = async (req, res) => {
     });
 
     res.json({
-      message: 'Signalement sauvegardé. Vous avez 24h pour soumettre le Rapport Initial.',
+      message: 'Signalement sauvegardé. Vous avez 24h pour soumettre la Fiche Initiale.',
       signalement,
       workflow,
       deadlineAt: initialDeadline,

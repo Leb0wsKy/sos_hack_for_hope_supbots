@@ -22,13 +22,21 @@ const resolveTargets = (event, payload) => {
       return [roomForRoleVillage('LEVEL2', villageId)];
     case 'workflow.stageCompleted':
       if (!villageId) return [];
-      if (payload?.stage === 'initialReport' || payload?.stage === 'finalReport') {
-        return [
-          roomForRoleDetailsVillage('VILLAGE_DIRECTOR', villageId),
-          roomForRoleDetails('NATIONAL_OFFICE')
-        ];
+      return [
+        roomForRoleDetailsVillage('VILLAGE_DIRECTOR', villageId),
+        roomForRoleDetails('NATIONAL_OFFICE')
+      ];
+    case 'signalement.closed':
+      // Notify the Level 1 user who created the signalement
+      const targets = [];
+      if (payload?.createdBy) {
+        targets.push(roomForUser(String(payload.createdBy)));
       }
-      return [];
+      if (villageId) {
+        targets.push(roomForRoleVillage('LEVEL1', villageId));
+        targets.push(roomForRoleDetailsVillage('VILLAGE_DIRECTOR', villageId));
+      }
+      return targets;
     case 'signalement.escalated':
       if (payload?.escalatedTo === 'NATIONAL_OFFICE') {
         return [roomForRoleDetails('NATIONAL_OFFICE')];
