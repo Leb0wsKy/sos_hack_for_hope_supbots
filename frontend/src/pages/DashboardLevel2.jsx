@@ -26,6 +26,7 @@ import {
   classifySignalement as classifyAPI,
   downloadTemplate,
   generateDPE,
+  getDPEDraft,
   markDpeGenerated,
   closeWorkflow,
 } from '../services/api';
@@ -293,6 +294,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [workflow, setWorkflow] = useState(null);
   const [loadingWf, setLoadingWf] = useState(false);
   const [dpeResult, setDpeResult] = useState(null);
+  const [showFullDpe, setShowFullDpe] = useState(false);
 
   // Fetch the real Workflow document from the backend
   const fetchWorkflow = useCallback(async () => {
@@ -315,6 +317,15 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       setWorkflow(null);
     }
   }, [item?._id, fetchWorkflow]);
+
+  // Auto-fetch existing DPE draft if already generated
+  useEffect(() => {
+    if (workflow?.dpeGenerated && item?._id && !dpeResult) {
+      getDPEDraft(item._id)
+        .then(({ data }) => setDpeResult({ draft: data.draft, metadata: data.metadata }))
+        .catch(() => {});
+    }
+  }, [workflow?.dpeGenerated, item?._id]);
 
   if (!item) return null;
 
@@ -442,6 +453,87 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       console.error('Template download failed:', error);
       alert('Erreur lors du téléchargement du template');
     }
+  };
+
+  /** Download the AI-generated DPE report as a formatted .txt file */
+  const handleDownloadGeneratedDPE = () => {
+    const d = dpeResult?.draft;
+    if (!d) return;
+
+    const sep = '═'.repeat(60);
+    const sub = '─'.repeat(60);
+    const lines = [
+      sep,
+      d.titre || 'Rapport DPE',
+      `SOS Villages d'Enfants Tunisie`,
+      `Généré le : ${new Date().toLocaleDateString('fr-FR')}`,
+      sep,
+      '',
+      sub,
+      '1. RÉSUMÉ DU SIGNALEMENT',
+      sub,
+      d.resume_signalement || '',
+      '',
+      sub,
+      '2. CONTEXTE',
+      sub,
+      d.contexte || '',
+      '',
+      sub,
+      '3. OBSERVATIONS',
+      sub,
+      d.observations || '',
+      '',
+      sub,
+      '4. ÉVALUATION DU RISQUE',
+      sub,
+      `Niveau : ${d.evaluation_risque?.niveau?.toUpperCase() || 'N/A'}`,
+      `Justification : ${d.evaluation_risque?.justification || 'N/A'}`,
+      '',
+      sub,
+      '5. RECOMMANDATIONS',
+      sub,
+      ...(Array.isArray(d.recommandations)
+        ? d.recommandations.map((r, i) => `  ${i + 1}. ${r}`)
+        : ['  Aucune']),
+      '',
+      sub,
+      "6. PLAN D'ACTION",
+      sub,
+      ...(Array.isArray(d.plan_action)
+        ? d.plan_action.map(
+            (a, i) =>
+              `  ${i + 1}. ${a.action}\n     Responsable : ${a.responsable}\n     Délai : ${a.delai}`
+          )
+        : ['  Aucun']),
+      '',
+      sub,
+      '7. SUIVI RECOMMANDÉ',
+      sub,
+      d.suivi || '',
+      '',
+      sub,
+      '8. POINTS À VÉRIFIER',
+      sub,
+      ...(Array.isArray(d.points_a_verifier)
+        ? d.points_a_verifier.map((p) => `  ☐ ${p}`)
+        : ['  Aucun']),
+      '',
+      sep,
+      d.disclaimer || 'Brouillon généré par IA — à valider par un professionnel.',
+      sep,
+    ];
+
+    const text = lines.join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rapport-dpe-genere-${item._id?.slice(-6) || 'draft'}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   /** Generate DPE AI report for the signalement */
@@ -664,12 +756,119 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                 </div>
               )}
 
-              {/* DPE generation result preview */}
+              {/* DPE full AI-generated report */}
               {dpeResult?.draft && (
-                <div className="mt-2 p-3 bg-sos-gray-50 border border-sos-gray-200 rounded-lg max-h-48 overflow-y-auto">
-                  <p className="text-xs font-bold text-sos-gray-700 mb-1">Aperçu du brouillon DPE :</p>
-                  <p className="text-xs text-sos-gray-600">{dpeResult.draft.titre}</p>
-                  <p className="text-xs text-sos-gray-500 mt-1">{dpeResult.draft.resume_signalement}</p>
+                <div className="mt-2 border border-purple-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setShowFullDpe(!showFullDpe)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 text-xs font-bold text-purple-700 hover:bg-purple-100 transition cursor-pointer"
+                  >
+                    <span>📄 Rapport DPE généré par l'IA {dpeResult.metadata?.mode === 'ollama' ? '(Llama)' : '(modèle de secours)'}</span>
+                    <span>{showFullDpe ? '▲ Réduire' : '▼ Voir le rapport complet'}</span>
+                  </button>
+                  {showFullDpe && (
+                    <div className="p-4 bg-white space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar text-xs">
+                      {/* Titre */}
+                      <h4 className="text-sm font-bold text-sos-gray-900 border-b pb-1">{dpeResult.draft.titre}</h4>
+
+                      {/* Résumé */}
+                      <div>
+                        <p className="font-semibold text-sos-gray-700 mb-0.5">Résumé du signalement</p>
+                        <p className="text-sos-gray-600 whitespace-pre-wrap">{dpeResult.draft.resume_signalement}</p>
+                      </div>
+
+                      {/* Contexte */}
+                      <div>
+                        <p className="font-semibold text-sos-gray-700 mb-0.5">Contexte</p>
+                        <p className="text-sos-gray-600 whitespace-pre-wrap">{dpeResult.draft.contexte}</p>
+                      </div>
+
+                      {/* Observations */}
+                      <div>
+                        <p className="font-semibold text-sos-gray-700 mb-0.5">Observations</p>
+                        <p className="text-sos-gray-600 whitespace-pre-wrap">{dpeResult.draft.observations}</p>
+                      </div>
+
+                      {/* Évaluation du risque */}
+                      {dpeResult.draft.evaluation_risque && (
+                        <div>
+                          <p className="font-semibold text-sos-gray-700 mb-0.5">Évaluation du risque</p>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              dpeResult.draft.evaluation_risque.niveau === 'eleve' ? 'bg-red-100 text-red-700' :
+                              dpeResult.draft.evaluation_risque.niveau === 'moyen' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {dpeResult.draft.evaluation_risque.niveau?.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-sos-gray-600">{dpeResult.draft.evaluation_risque.justification}</p>
+                        </div>
+                      )}
+
+                      {/* Recommandations */}
+                      {Array.isArray(dpeResult.draft.recommandations) && dpeResult.draft.recommandations.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-sos-gray-700 mb-0.5">Recommandations</p>
+                          <ul className="list-disc list-inside space-y-0.5 text-sos-gray-600">
+                            {dpeResult.draft.recommandations.map((r, i) => <li key={i}>{r}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Plan d'action */}
+                      {Array.isArray(dpeResult.draft.plan_action) && dpeResult.draft.plan_action.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-sos-gray-700 mb-0.5">Plan d'action</p>
+                          <div className="border border-sos-gray-200 rounded overflow-hidden">
+                            <table className="w-full text-[10px]">
+                              <thead className="bg-sos-gray-100">
+                                <tr>
+                                  <th className="px-2 py-1 text-left">Action</th>
+                                  <th className="px-2 py-1 text-left">Responsable</th>
+                                  <th className="px-2 py-1 text-left">Délai</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dpeResult.draft.plan_action.map((a, i) => (
+                                  <tr key={i} className="border-t border-sos-gray-100">
+                                    <td className="px-2 py-1">{a.action}</td>
+                                    <td className="px-2 py-1">{a.responsable}</td>
+                                    <td className="px-2 py-1">{a.delai}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Suivi */}
+                      <div>
+                        <p className="font-semibold text-sos-gray-700 mb-0.5">Suivi recommandé</p>
+                        <p className="text-sos-gray-600 whitespace-pre-wrap">{dpeResult.draft.suivi}</p>
+                      </div>
+
+                      {/* Points à vérifier */}
+                      {Array.isArray(dpeResult.draft.points_a_verifier) && dpeResult.draft.points_a_verifier.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-sos-gray-700 mb-0.5">Points à vérifier</p>
+                          <ul className="space-y-0.5 text-sos-gray-600">
+                            {dpeResult.draft.points_a_verifier.map((p, i) => (
+                              <li key={i} className="flex items-start gap-1"><span>☐</span><span>{p}</span></li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Disclaimer */}
+                      {dpeResult.draft.disclaimer && (
+                        <p className="text-[10px] text-sos-gray-400 italic border-t pt-2 mt-2">
+                          {dpeResult.draft.disclaimer}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -678,8 +877,16 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                 /* For DPE stage, only show upload after DPE is generated */
                 (!nextStage.isDpe || wf.dpeGenerated) && (
                 <div className="mt-3 space-y-3">
-                  {/* Template download */}
-                  {nextStage.template && (
+                  {/* Download: generated DPE report if available, otherwise template */}
+                  {nextStage.isDpe && dpeResult?.draft ? (
+                    <button
+                      onClick={handleDownloadGeneratedDPE}
+                      className="flex items-center gap-1.5 text-xs text-purple-700 font-semibold hover:underline"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      📥 Télécharger le Rapport DPE généré
+                    </button>
+                  ) : nextStage.template ? (
                     <button
                       onClick={() => handleDownloadTemplate(nextStage.template)}
                       className="flex items-center gap-1.5 text-xs text-sos-blue hover:underline"
@@ -687,7 +894,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                       <FileText className="w-3.5 h-3.5" />
                       Télécharger le template : {nextStage.label}
                     </button>
-                  )}
+                  ) : null}
 
                   <textarea
                     value={stageContent}
