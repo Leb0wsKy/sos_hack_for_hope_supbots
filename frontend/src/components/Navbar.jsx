@@ -36,14 +36,15 @@ function Navbar() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/');
+    navigate('/login');
   };
 
   const visibleLinks = navLinks.filter(
     (l) => !user || l.roles.includes(user.role)
   );
 
-  if (!token) return null;
+  // Hide navbar on landing and login pages
+  if (!token || location.pathname === '/' || location.pathname === '/login') return null;
 
   return (
     <nav className="sticky top-0 z-50 bg-sos-blue shadow-md">

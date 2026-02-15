@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import DashboardLevel1 from './pages/DashboardLevel1';
 import DashboardLevel2 from './pages/DashboardLevel2';
@@ -9,14 +10,14 @@ import DashboardLevel4 from './pages/DashboardLevel4';
 /* Redirect to login when no token is present */
 function ProtectedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/" replace />;
+  if (!token) return <Navigate to="/login" replace />;
 
   if (allowedRoles) {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (!allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+      if (!allowedRoles.includes(user.role)) return <Navigate to="/login" replace />;
     } catch {
-      return <Navigate to="/" replace />;
+      return <Navigate to="/login" replace />;
     }
   }
 
@@ -28,7 +29,8 @@ function App() {
     <Router>
       <Navbar />
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/dashboard-level1" element={
           <ProtectedRoute allowedRoles={['LEVEL1','LEVEL2','LEVEL3','LEVEL4']}>
             <DashboardLevel1 />
