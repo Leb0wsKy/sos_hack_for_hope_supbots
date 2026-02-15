@@ -57,6 +57,9 @@ export const archiveSignalement = (id) =>
 export const sauvegarderSignalement = (id) => 
   api.put(`/signalements/${id}/sauvegarder`);
 
+export const predictFalseAlarm = (id) =>
+  api.get(`/signalements/${id}/predict-false-alarm`);
+
 export const markSignalementFaux = (id) =>
   api.put(`/signalements/${id}/faux`);
 

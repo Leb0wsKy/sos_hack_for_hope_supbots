@@ -178,34 +178,11 @@ export const getSignalements = async (req, res) => {
     if (req.user.role === 'LEVEL1') {
       // Level 1 only sees their own village's reports
       filter.village = req.user.village?._id || req.user.village;
-    } else if (req.user.role === 'LEVEL2') {
-      // Level 2 sees ALL signalements from their village + any assigned to them
-      console.log('Level 2 filtering - User:', req.user.id, 'Village:', req.user.village);
-      
-      const userVillage = req.user.village?._id || req.user.village;
-      
-      if (userVillage) {
-        filter.$or = [
-          { village: userVillage },        // All from their village (any status)
-          { assignedTo: req.user.id }      // Their assigned signalements (any village)
-        ];
-      } else {
-        // If no specific village, see all unassigned + their assigned
-        filter.$or = [
-          { assignedTo: { $in: [null, undefined] } },
-          { assignedTo: req.user.id }
-        ];
-      }
-      
-      // If they want only their primary village
-      if (myVillage === 'true') {
-        filter.village = userVillage;
-        delete filter.$or; // Remove $or when filtering by specific village
-      }
     } else if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+      // Village directors only see their village
       filter.village = req.user.village?._id || req.user.village;
     }
-    // Level 3 (national) and Level 4 see all
+    // Level 2 (analysts), Level 3 (governance) and Level 4 (admin) see all signalements
     
     const signalements = await Signalement.find(filter)
       .populate('createdBy', 'name email role roleDetails')
@@ -514,6 +491,65 @@ export const downloadAttachment = async (req, res) => {
 };
 
 // Mark signalement as fausse alarme (Level 2 — direct reject without workflow)
+/**
+ * Get ML prediction for false alarm classification
+ */
+export const predictFalseAlarm = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const signalement = await Signalement.findById(id);
+    
+    if (!signalement) {
+      return res.status(404).json({ message: 'Signalement not found' });
+    }
+
+    // Prepare data for ML model
+    const mlData = {
+      description: signalement.description,
+      incidentType: signalement.incidentType || 'AUTRE',
+      urgencyLevel: signalement.urgencyLevel || 'MOYEN',
+      aiSuspicionScore: signalement.aiSuspicionScore || 50
+    };
+
+    // Call ML API
+    try {
+      const axios = (await import('axios')).default;
+      const mlResponse = await axios.post('http://localhost:5001/predict', mlData, {
+        timeout: 5000
+      });
+
+      res.json({
+        signalement: {
+          id: signalement._id,
+          title: signalement.title,
+          description: signalement.description,
+          incidentType: signalement.incidentType,
+          urgencyLevel: signalement.urgencyLevel
+        },
+        prediction: mlResponse.data
+      });
+    } catch (mlError) {
+      console.error('ML API Error:', mlError.message);
+      // Return a default response if ML service is unavailable
+      res.json({
+        signalement: {
+          id: signalement._id,
+          title: signalement.title,
+          description: signalement.description
+        },
+        prediction: {
+          is_false_alarm: null,
+          confidence: 0,
+          recommendation: 'Service ML non disponible - Décision manuelle requise',
+          error: 'ML service unavailable'
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 export const markAsFaux = async (req, res) => {
   try {
     const { id } = req.params;

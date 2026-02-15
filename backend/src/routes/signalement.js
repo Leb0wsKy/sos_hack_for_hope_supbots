@@ -11,6 +11,7 @@ import {
   downloadAttachment,
   sauvegarderSignalement,
   markAsFaux,
+  predictFalseAlarm,
   getMySignalementsWithDeadlines,
   directorSign,
   directorForward
@@ -94,6 +95,12 @@ router.put('/:id/sauvegarder',
   logAudit('SAUVEGARDER_SIGNALEMENT', 'Signalement'),
   invalidateCache(['cache:signalements:*', 'cache:analytics:*']),
   sauvegarderSignalement
+);
+
+// Get ML prediction for false alarm (Level 2)
+router.get('/:id/predict-false-alarm',
+  requireLevel2,
+  predictFalseAlarm
 );
 
 // Mark signalement as fausse alarme (Level 2 — direct reject)

@@ -1,0 +1,14 @@
+{
+  "incident_types": [
+    "VIOLENCE",
+    "NEGLIGENCE",
+    "ABUS_SEXUEL",
+    "AUTRE"
+  ],
+  "urgency_levels": [
+    "BAS",
+    "MOYEN",
+    "ELEVE",
+    "CRITIQUE"
+  ]
+}
