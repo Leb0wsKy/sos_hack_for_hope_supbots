@@ -8,6 +8,7 @@ import {
   Filter,
   Search,
   ArrowUpRight,
+  Download,
   FileText,
   Eye,
   UserPlus,
@@ -20,6 +21,8 @@ import {
 import {
   getSignalements,
   sauvegarderSignalement,
+  markSignalementFaux,
+  downloadAttachment,
   createWorkflow,
   getWorkflow,
   updateWorkflowStage,
@@ -296,6 +299,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [loadingWf, setLoadingWf] = useState(false);
   const [dpeResult, setDpeResult] = useState(null);
   const [showFullDpe, setShowFullDpe] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null); // { url, name, type }
 
   // Fetch the real Workflow document from the backend
   const fetchWorkflow = useCallback(async () => {
@@ -396,9 +400,25 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
 
   const handleClassify = async (classification) => {
     if (!wf?._id) return;
+
+    // Confirmation for destructive actions
+    if (classification === 'FAUX_SIGNALEMENT') {
+      if (!window.confirm('⚠️ Êtes-vous sûr de marquer ce signalement comme FAUX ?\nCette action est irréversible.')) return;
+    }
+    if (classification === 'PRISE_EN_CHARGE') {
+      if (!window.confirm('Ce signalement sera traité comme une prise en charge simple (sans workflow complet).\nConfirmer ?')) return;
+    }
+
     setActionLoading('cls');
     try {
       await classifyAPI(wf._id, classification);
+      if (classification === 'SAUVEGARDE') {
+        alert('✅ Classification : Sauvegarde. Le workflow 6 étapes est maintenant actif.');
+      } else if (classification === 'PRISE_EN_CHARGE') {
+        alert('✅ Prise en charge enregistrée. Le signalement a été clôturé (pas de workflow requis).');
+      } else if (classification === 'FAUX_SIGNALEMENT') {
+        alert('🚫 Signalement marqué comme faux. Il a été archivé.');
+      }
       await fetchWorkflow();
       onRefresh();
     } catch (error) {
@@ -660,18 +680,131 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             <div>
               <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-2">Pièces jointes</p>
               <div className="space-y-1.5">
-                {item.attachments.map((a, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm bg-sos-gray-50 rounded-lg px-3 py-2">
-                    <FileText className="w-4 h-4 text-sos-blue" />
-                    <span className="truncate flex-1 text-sos-gray-700">{a.originalName || a.filename}</span>
-                  </div>
-                ))}
+                {item.attachments.map((a, i) => {
+                  const mime = a.mimeType || '';
+                  const canPreview = mime.startsWith('image/') || mime === 'application/pdf';
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-sm bg-sos-gray-50 rounded-lg px-3 py-2">
+                      <FileText className="w-4 h-4 text-sos-blue shrink-0" />
+                      <span className="truncate flex-1 text-sos-gray-700">{a.originalName || a.filename}</span>
+                      {canPreview && (
+                        <button
+                          title="Aperçu"
+                          onClick={async () => {
+                            try {
+                              const { data } = await downloadAttachment(item._id, a.filename);
+                              const blob = new Blob([data], { type: mime });
+                              const url = window.URL.createObjectURL(blob);
+                              setPreviewFile({ url, name: a.originalName || a.filename, type: mime });
+                            } catch (err) {
+                              console.error('Preview failed:', err);
+                              alert('Erreur lors de l\'aperçu du fichier.');
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4 text-sos-blue" />
+                        </button>
+                      )}
+                      <button
+                        title="Télécharger"
+                        onClick={async () => {
+                          try {
+                            const { data } = await downloadAttachment(item._id, a.filename);
+                            const url = window.URL.createObjectURL(new Blob([data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', a.originalName || a.filename);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                            window.URL.revokeObjectURL(url);
+                          } catch (err) {
+                            console.error('Download failed:', err);
+                            alert('Erreur lors du téléchargement du fichier.');
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 text-sos-blue" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Workflow / Progress */}
-          {wf && (
+          {/* File preview modal */}
+          {previewFile && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                 onClick={() => { window.URL.revokeObjectURL(previewFile.url); setPreviewFile(null); }}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-4xl h-[85vh] flex flex-col overflow-hidden"
+                   onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-sos-gray-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="w-4 h-4 text-sos-blue shrink-0" />
+                    <span className="text-sm font-semibold text-sos-gray-800 truncate">{previewFile.name}</span>
+                  </div>
+                  <button onClick={() => { window.URL.revokeObjectURL(previewFile.url); setPreviewFile(null); }}
+                          className="p-1.5 rounded-lg hover:bg-sos-gray-100 transition cursor-pointer">
+                    <X className="w-5 h-5 text-sos-gray-600" />
+                  </button>
+                </div>
+                {/* Content */}
+                <div className="flex-1 overflow-auto p-2 bg-sos-gray-50 flex items-center justify-center">
+                  {previewFile.type === 'application/pdf' ? (
+                    <iframe src={previewFile.url} className="w-full h-full rounded-lg" title={previewFile.name} />
+                  ) : previewFile.type.startsWith('image/') ? (
+                    <img src={previewFile.url} alt={previewFile.name}
+                         className="max-w-full max-h-full object-contain rounded-lg" />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Prise en charge — no workflow needed */}
+          {wf && item.classification === 'PRISE_EN_CHARGE' && (
+            <div className="p-4 bg-sos-blue-light border border-blue-200 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-sos-blue">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="text-sm font-bold">Prise en charge</span>
+              </div>
+              <p className="text-xs text-sos-gray-600">
+                Ce signalement a été pris en charge directement. Aucun workflow de traitement n'est requis
+                car la situation ne nécessite pas un suivi psycho-éducatif complet.
+              </p>
+              {wf.closedAt && (
+                <p className="text-[10px] text-sos-gray-400">
+                  Clôturé le {new Date(wf.closedAt).toLocaleString('fr-FR')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Faux signalement — archived */}
+          {wf && item.classification === 'FAUX_SIGNALEMENT' && (
+            <div className="p-4 bg-sos-gray-100 border border-sos-gray-300 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-sos-gray-600">
+                <X className="w-5 h-5" />
+                <span className="text-sm font-bold">Faux signalement</span>
+              </div>
+              <p className="text-xs text-sos-gray-500">
+                Ce signalement a été identifié comme faux par le psychologue.
+                Le dossier a été archivé.
+              </p>
+              {wf.closedAt && (
+                <p className="text-[10px] text-sos-gray-400">
+                  Archivé le {new Date(wf.closedAt).toLocaleString('fr-FR')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Workflow / Progress — only for SAUVEGARDE or not-yet-classified */}
+          {wf && (!item.classification || item.classification === 'SAUVEGARDE') && (
             <div>
               <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-3">
                 Progression du workflow ({completedStageCount(wf)}/{STAGE_ORDER.length})
@@ -999,19 +1132,34 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             </div>
           )}
 
-          {/* Classification */}
+          {/* Classification — show buttons only if not yet classified */}
           {wf && !item.classification && (
             <div>
               <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-2">Classification</p>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-xs text-sos-gray-500 mb-3">
+                Choisissez le type de traitement pour ce signalement :
+              </p>
+              <div className="space-y-2">
                 {CLASSIFICATION_OPTIONS.map((c) => (
                   <button
                     key={c.value}
                     onClick={() => handleClassify(c.value)}
                     disabled={actionLoading === 'cls'}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${c.color} hover:opacity-80 disabled:opacity-50`}
+                    className={`w-full flex items-start gap-3 px-4 py-3 rounded-lg text-left transition cursor-pointer border hover:shadow-sm disabled:opacity-50 ${
+                      c.value === 'SAUVEGARDE' ? 'border-red-200 bg-red-50 hover:bg-red-100' :
+                      c.value === 'PRISE_EN_CHARGE' ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' :
+                      'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                    }`}
                   >
-                    {c.label}
+                    <div className="flex-1">
+                      <p className={`text-sm font-semibold ${c.color.split(' ').pop()}`}>{c.label}</p>
+                      <p className="text-[10px] text-sos-gray-500 mt-0.5">
+                        {c.value === 'SAUVEGARDE' && 'Situation sérieuse → workflow complet 6 étapes (DPE, évaluation, plan d\'action…)'}
+                        {c.value === 'PRISE_EN_CHARGE' && 'Situation mineure → prise en charge directe, pas de workflow requis'}
+                        {c.value === 'FAUX_SIGNALEMENT' && 'Signalement non fondé → archivage immédiat du dossier'}
+                      </p>
+                    </div>
+                    {actionLoading === 'cls' && <Loader2 className="w-4 h-4 animate-spin mt-1" />}
                   </button>
                 ))}
               </div>
@@ -1020,9 +1168,18 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
 
           {item.classification && (
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-sos-blue" />
+              <Shield className={`w-4 h-4 ${
+                item.classification === 'SAUVEGARDE' ? 'text-sos-red' :
+                item.classification === 'PRISE_EN_CHARGE' ? 'text-sos-blue' :
+                'text-sos-gray-400'
+              }`} />
               <span className="text-sm font-medium text-sos-gray-700">
-                Classification : <strong>{item.classification}</strong>
+                Classification : <strong>{
+                  item.classification === 'SAUVEGARDE' ? 'Sauvegarde' :
+                  item.classification === 'PRISE_EN_CHARGE' ? 'Prise en charge' :
+                  item.classification === 'FAUX_SIGNALEMENT' ? 'Faux signalement' :
+                  item.classification
+                }</strong>
               </span>
             </div>
           )}
@@ -1031,16 +1188,40 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
           <div className="pt-4 border-t border-sos-gray-200 space-y-2">
             {/* Sauvegarde button: visible when not yet sauvegarded */}
             {item.status === 'EN_ATTENTE' && !alreadySauvegarded && (
-              <button
-                onClick={handleSauvegarder}
-                disabled={actionLoading === 'sauv'}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                           bg-sos-coral text-white text-sm font-semibold
-                           transition disabled:opacity-60 cursor-pointer"
-              >
-                {actionLoading === 'sauv' ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
-                Sauvegarder (prendre en charge)
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSauvegarder}
+                  disabled={actionLoading === 'sauv' || actionLoading === 'faux'}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                             bg-sos-coral text-white text-sm font-semibold
+                             transition disabled:opacity-60 cursor-pointer"
+                >
+                  {actionLoading === 'sauv' ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                  Sauvegarder
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm('⚠️ Êtes-vous sûr de vouloir marquer ce signalement comme fausse alarme ?\n\nCette action est irréversible.')) return;
+                    setActionLoading('faux');
+                    try {
+                      await markSignalementFaux(item._id);
+                      alert('✅ Signalement marqué comme fausse alarme.');
+                      onRefresh();
+                    } catch (err) {
+                      console.error('markFaux failed:', err);
+                      alert(err.response?.data?.message || 'Erreur lors du marquage.');
+                    }
+                    setActionLoading('');
+                  }}
+                  disabled={actionLoading === 'sauv' || actionLoading === 'faux'}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                             bg-sos-gray-200 text-sos-gray-700 text-sm font-semibold
+                             hover:bg-sos-gray-300 transition disabled:opacity-60 cursor-pointer"
+                >
+                  {actionLoading === 'faux' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                  Fausse alarme
+                </button>
+              </div>
             )}
             {/* Create workflow button: visible when sauvegarded but no workflow yet */}
             {!wf && !loadingWf && alreadySauvegarded && item.status === 'EN_COURS' && (

@@ -6,6 +6,8 @@ import DashboardLevel1 from './pages/DashboardLevel1';
 import DashboardLevel2 from './pages/DashboardLevel2';
 import DashboardLevel3 from './pages/DashboardLevel3';
 import DashboardLevel4 from './pages/DashboardLevel4';
+import DashboardDirecteur from './pages/DashboardDirecteur';
+import DashboardNational from './pages/DashboardNational';
 
 /* Redirect to login when no token is present */
 function ProtectedRoute({ children, allowedRoles }) {
@@ -44,6 +46,16 @@ function App() {
         <Route path="/dashboard-level3" element={
           <ProtectedRoute allowedRoles={['LEVEL3','LEVEL4']}>
             <DashboardLevel3 />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard-directeur" element={
+          <ProtectedRoute allowedRoles={['LEVEL2','LEVEL3','LEVEL4']}>
+            <DashboardDirecteur />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard-national" element={
+          <ProtectedRoute allowedRoles={['LEVEL3','LEVEL4']}>
+            <DashboardNational />
           </ProtectedRoute>
         } />
         <Route path="/dashboard-level4" element={

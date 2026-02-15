@@ -5,7 +5,7 @@ import Signalement from '../models/Signalement.js';
 export const getAllVillages = async (req, res) => {
   try {
     const filter = { isActive: true };
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       filter._id = req.user.village;
     }
 
@@ -29,7 +29,7 @@ export const getVillageById = async (req, res) => {
       return res.status(404).json({ message: 'Village not found' });
     }
 
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       if (String(village._id) !== String(req.user.village)) {
         return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
       }
@@ -92,7 +92,7 @@ export const getVillageStatistics = async (req, res) => {
       return res.status(404).json({ message: 'Village not found' });
     }
 
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       if (String(village._id) !== String(req.user.village)) {
         return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
       }

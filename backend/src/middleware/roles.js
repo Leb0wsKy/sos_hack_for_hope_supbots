@@ -162,8 +162,12 @@ export const allowGovernanceOperation = (req, res, next) => {
   if (req.user.role === 'LEVEL3' || req.user.role === 'LEVEL4') {
     return next();
   }
+  // Allow Village Directors (LEVEL2) governance operations
+  if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    return next();
+  }
   
   return res.status(403).json({ 
-    message: 'Access denied. Only governance (Level 3/4) can perform this operation.'
+    message: 'Access denied. Only governance (Level 3/4) or Village Directors can perform this operation.'
   });
 };

@@ -3,7 +3,7 @@ import Village from '../models/Village.js';
 import User from '../models/User.js';
 
 const enforceVillageAnalyticsScope = (req, filter = {}) => {
-  if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+  if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
     return { ...filter, village: req.user.village };
   }
 
@@ -90,7 +90,7 @@ export const getAnalytics = async (req, res) => {
       urgencyLevel: { $in: ['ELEVE', 'CRITIQUE'] },
       status: { $in: ['EN_ATTENTE', 'EN_COURS'] }
     };
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       recentAlertFilter.village = req.user.village;
     }
 
@@ -138,7 +138,7 @@ export const getHeatmapData = async (req, res) => {
   try {
     // Get all villages with their coordinates and signalement counts
     const villageFilter = { isActive: true };
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       villageFilter._id = req.user.village;
     }
     const villages = await Village.find(villageFilter);
@@ -198,7 +198,7 @@ export const getHeatmapData = async (req, res) => {
 export const getVillageRatings = async (req, res) => {
   try {
     const villageFilter = { isActive: true };
-    if (req.user.role === 'LEVEL3' && req.user.roleDetails === 'VILLAGE_DIRECTOR') {
+    if (req.user.roleDetails === 'VILLAGE_DIRECTOR') {
       villageFilter._id = req.user.village;
     }
 
