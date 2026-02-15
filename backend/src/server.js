@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import connectDB from './config/db.js';
+import './config/redis.js'; // Initialize Redis
 import authRoutes from './routes/auth.js';
 import signalementRoutes from './routes/signalement.js';
 import analyticsRoutes from './routes/analytics.js';

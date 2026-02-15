@@ -121,7 +121,44 @@ Frontend runs on **http://localhost:3000** (Vite proxies `/api` requests to the 
 - Multer (file uploads)
 - Socket.IO (real-time events)
 - Ollama SDK (AI-assisted DPE generation)
+- **Redis (ioredis) - Caching layer**
 - Nodemon (dev)
+
+---
+
+## Performance & Caching
+
+This project uses **Redis** for caching to improve API performance and reduce database load.
+
+### Redis Setup with Docker
+
+1. **Start Redis container:**
+   ```bash
+   docker-compose up -d redis
+   ```
+
+2. **Verify Redis is running:**
+   ```bash
+   docker ps | findstr redis
+   ```
+
+3. **Configure in `.env`:**
+   ```env
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   REDIS_PASSWORD=
+   REDIS_CACHE_TTL=3600
+   ```
+
+### Cached Endpoints
+
+- **Villages** - 10-30 minute cache
+- **Signalements** - 1-5 minute cache
+- **Analytics** - 5-10 minute cache
+
+Cache is automatically invalidated on data mutations (POST/PUT/DELETE operations).
+
+**📖 For detailed Redis setup and testing guide, see:** [backend/REDIS_CACHE_GUIDE.md](backend/REDIS_CACHE_GUIDE.md)
 
 ---
 

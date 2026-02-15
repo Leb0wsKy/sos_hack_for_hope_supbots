@@ -8,6 +8,7 @@ import {
 import { protect } from '../middleware/auth.js';
 import { requireLevel3 } from '../middleware/roles.js';
 import { logAudit } from '../middleware/auditLog.js';
+import { cacheMiddleware, analyticsCacheKey } from '../middleware/cache.js';
 
 const router = express.Router();
 
@@ -15,14 +16,14 @@ const router = express.Router();
 router.use(protect);
 router.use(requireLevel3);
 
-// Global analytics
-router.get('/', logAudit('ACCESS_ANALYTICS'), getAnalytics);
+// Global analytics - cache for 5 minutes (300 seconds)
+router.get('/', logAudit('ACCESS_ANALYTICS'), cacheMiddleware(300, analyticsCacheKey), getAnalytics);
 
-// Heatmap data
-router.get('/heatmap', logAudit('ACCESS_ANALYTICS'), getHeatmapData);
+// Heatmap data - cache for 10 minutes (600 seconds)
+router.get('/heatmap', logAudit('ACCESS_ANALYTICS'), cacheMiddleware(600, analyticsCacheKey), getHeatmapData);
 
-// Village ratings
-router.get('/village-ratings', logAudit('ACCESS_ANALYTICS'), getVillageRatings);
+// Village ratings - cache for 10 minutes (600 seconds)
+router.get('/village-ratings', logAudit('ACCESS_ANALYTICS'), cacheMiddleware(600, analyticsCacheKey), getVillageRatings);
 
 // Export data
 router.get('/export', logAudit('EXPORT_DATA'), exportData);
