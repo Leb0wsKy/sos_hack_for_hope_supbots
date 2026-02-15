@@ -19,6 +19,7 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import { getAnalytics, getVillageRatings, exportData } from '../services/api';
+import BackgroundPattern from '../components/BackgroundPattern';
 
 /* ═══════════════════════════════════════════════════════
    Helpers
@@ -38,7 +39,7 @@ const INCIDENT_LABELS = {
 
 const URGENCY_COLOR = {
   FAIBLE: 'bg-sos-green',
-  MOYEN: 'bg-sos-yellow',
+  MOYEN: 'bg-sos-blue',
   ELEVE: 'bg-orange-500',
   CRITIQUE: 'bg-sos-red',
 };
@@ -290,7 +291,9 @@ function DashboardLevel3() {
   const villageMax = Math.max(...byVillage.map((v) => v.count), 1);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 pb-12">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden pb-12">
+      <BackgroundPattern />
+      <div className="relative z-10">
       {/* ── Header ── */}
       <div className="bg-white border-b border-sos-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
@@ -348,8 +351,8 @@ function DashboardLevel3() {
             label="En attente"
             value={ov.enAttente ?? 0}
             icon={Clock}
-            color="text-yellow-700"
-            bgLight="bg-sos-yellow-light"
+            color="text-sos-blue"
+            bgLight="bg-sos-blue-lighter"
           />
           <StatWidget
             label="En cours"
@@ -534,6 +537,7 @@ function DashboardLevel3() {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

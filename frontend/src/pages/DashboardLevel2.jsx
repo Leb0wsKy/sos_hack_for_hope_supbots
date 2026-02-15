@@ -33,6 +33,7 @@ import {
   markDpeGenerated,
   closeWorkflow,
 } from '../services/api';
+import BackgroundPattern from '../components/BackgroundPattern';
 
 /* ═══════════════════════════════════════════════════════
    Constants
@@ -40,20 +41,20 @@ import {
 
 const URGENCY = {
   FAIBLE: { label: 'Faible', bg: 'bg-sos-green-light', text: 'text-sos-green', dot: 'bg-sos-green' },
-  MOYEN: { label: 'Moyen', bg: 'bg-sos-yellow-light', text: 'text-yellow-700', dot: 'bg-sos-yellow' },
+  MOYEN: { label: 'Moyen', bg: 'bg-sos-blue-lighter', text: 'text-sos-blue', dot: 'bg-sos-blue' },
   ELEVE: { label: 'Élevé', bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-500' },
   CRITIQUE: { label: 'Critique', bg: 'bg-sos-red-light', text: 'text-sos-red', dot: 'bg-sos-red' },
 };
 
 const STATUS_MAP = {
-  EN_ATTENTE: { label: 'En attente', color: 'text-sos-yellow', icon: Clock },
+  EN_ATTENTE: { label: 'En attente', color: 'text-sos-blue', icon: Clock },
   EN_COURS: { label: 'En cours', color: 'text-sos-blue', icon: Activity },
   CLOTURE: { label: 'Clôturé', color: 'text-sos-green', icon: CheckCircle2 },
   FAUX_SIGNALEMENT: { label: 'Faux signalement', color: 'text-sos-gray-400', icon: X },
 };
 
 const KANBAN_COLUMNS = [
-  { key: 'EN_ATTENTE', label: 'En attente', accent: 'border-sos-yellow', iconBg: 'bg-sos-yellow-light', iconColor: 'text-yellow-700' },
+  { key: 'EN_ATTENTE', label: 'En attente', accent: 'border-sos-blue', iconBg: 'bg-sos-blue-lighter', iconColor: 'text-sos-blue' },
   { key: 'EN_COURS', label: 'En cours de traitement', accent: 'border-sos-blue', iconBg: 'bg-sos-blue-light', iconColor: 'text-sos-blue' },
   { key: 'CLOTURE', label: 'Clôturés', accent: 'border-sos-green', iconBg: 'bg-sos-green-light', iconColor: 'text-sos-green' },
 ];
@@ -139,8 +140,8 @@ const getCountdown = (deadlineAt) => {
       expired: false, 
       warning: true,
       message: `${hours}h ${minutes}m restantes`, 
-      color: 'text-yellow-700', 
-      bg: 'bg-sos-yellow-light',
+      color: 'text-sos-blue', 
+      bg: 'bg-sos-blue-lighter',
       hours,
       minutes 
     };
@@ -593,20 +594,20 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-center items-start pt-24">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      {/* Drawer */}
-      <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto animate-fade-in">
-        <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-sos-gray-200 flex items-center justify-between">
+      {/* Modal */}
+      <div className="relative w-full max-w-4xl max-h-[calc(100vh-7rem)] bg-white shadow-xl animate-fade-in rounded-xl mx-4 flex flex-col overflow-hidden">
+        <div className="flex-shrink-0 px-6 py-4 border-b border-sos-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-bold text-sos-gray-900">Détail du signalement</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-sos-gray-100 cursor-pointer">
             <X className="w-5 h-5 text-sos-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Header info */}
           <div className="space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
@@ -929,7 +930,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                           <div className="flex items-center gap-2 mb-1">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               dpeResult.draft.evaluation_risque.niveau === 'eleve' ? 'bg-red-100 text-red-700' :
-                              dpeResult.draft.evaluation_risque.niveau === 'moyen' ? 'bg-yellow-100 text-yellow-700' :
+                              dpeResult.draft.evaluation_risque.niveau === 'moyen' ? 'bg-sos-blue-lighter text-sos-blue' :
                               'bg-green-100 text-green-700'
                             }`}>
                               {dpeResult.draft.evaluation_risque.niveau?.toUpperCase()}
@@ -1192,8 +1193,8 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                   onClick={handleSauvegarder}
                   disabled={actionLoading === 'sauv' || actionLoading === 'faux'}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                             bg-sos-red text-white text-sm font-semibold
-                             hover:bg-red-700 transition disabled:opacity-60 cursor-pointer"
+                             bg-sos-coral text-white text-sm font-semibold
+                             transition disabled:opacity-60 cursor-pointer"
                 >
                   {actionLoading === 'sauv' ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
                   Sauvegarder
@@ -1322,7 +1323,9 @@ function DashboardLevel2() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden">
+      <BackgroundPattern />
+      <div className="relative z-10">
       {/* ── Top Bar ── */}
       <div className="bg-white border-b border-sos-gray-200">
         <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -1347,7 +1350,7 @@ function DashboardLevel2() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             {[
               { label: 'Total', value: statCounts.total, color: 'text-sos-blue', bg: 'bg-sos-blue-light' },
-              { label: 'En attente', value: statCounts.pending, color: 'text-yellow-700', bg: 'bg-sos-yellow-light' },
+              { label: 'En attente', value: statCounts.pending, color: 'text-sos-blue', bg: 'bg-sos-blue-lighter' },
               { label: 'Urgents', value: statCounts.urgent, color: 'text-sos-red', bg: 'bg-sos-red-light' },
               { label: 'Clôturés', value: statCounts.closed, color: 'text-sos-green', bg: 'bg-sos-green-light' },
             ].map((s) => (
@@ -1458,6 +1461,7 @@ function DashboardLevel2() {
       {selected && (
         <DetailDrawer item={selected} onClose={() => setSelected(null)} onRefresh={handleRefresh} />
       )}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   Lock,
   BarChart3,
 } from 'lucide-react';
+import BackgroundPattern from '../components/BackgroundPattern';
 
 /* ═══════════════════════════════════════════════════
    SOS Children's Villages icon (adult + child)
@@ -85,39 +86,41 @@ const FeatureCard = ({ icon: Icon, title, description }) => (
    ═══════════════════════════════════════════════════ */
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="relative min-h-screen bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden">
+      <BackgroundPattern />
+      <div className="relative z-10">
       {/* ── Navbar ── */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-sos-gray-200">
+      <nav className="sticky top-0 z-50 bg-gradient-to-r from-sos-blue-lighter via-white to-sos-blue-lighter/80 shadow-xl border-b border-sos-blue-light/30 backdrop-blur-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-sos-blue flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" strokeWidth={2.5} />
+          <div className="flex items-center justify-between h-20">
+            <Link to="/" className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform p-1.5">
+                <img src="/logo_sos.png" alt="SOS Logo" className="w-full h-full object-contain" />
               </div>
-              <span className="text-lg font-bold tracking-tight text-sos-gray-900">
-                SOS&nbsp;<span className="text-sos-blue">Safeguarding</span>
+              <span className="text-xl font-bold tracking-tight text-sos-navy">
+                SOS&nbsp;<span className="font-semibold bg-gradient-to-r from-sos-blue to-sos-coral bg-clip-text text-transparent">Safeguarding</span>
               </span>
             </Link>
 
             <div className="hidden md:flex items-center gap-6">
-              <a href="#about" className="text-sm font-medium text-sos-gray-600 hover:text-sos-blue transition">
+              <a href="#about" className="text-sm font-semibold text-sos-navy hover:text-sos-blue transition-colors">
                 À propos
               </a>
-              <a href="#services" className="text-sm font-medium text-sos-gray-600 hover:text-sos-blue transition">
+              <a href="#services" className="text-sm font-semibold text-sos-navy hover:text-sos-blue transition-colors">
                 Services
               </a>
-              <a href="#platform" className="text-sm font-medium text-sos-gray-600 hover:text-sos-blue transition">
+              <a href="#platform" className="text-sm font-semibold text-sos-navy hover:text-sos-blue transition-colors">
                 Plateforme
               </a>
-              <a href="#contact" className="text-sm font-medium text-sos-gray-600 hover:text-sos-blue transition">
+              <a href="#contact" className="text-sm font-semibold text-sos-navy hover:text-sos-blue transition-colors">
                 Contact
               </a>
             </div>
 
             <Link
               to="/login"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sos-blue text-white text-sm font-semibold
-                         hover:bg-sos-blue-dark active:scale-[0.97] transition-all shadow-sm"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sos-blue to-sos-coral text-white text-sm font-bold
+                         hover:shadow-lg active:scale-[0.97] transition-all shadow-md"
             >
               Se connecter
               <ArrowRight className="w-4 h-4" />
@@ -128,13 +131,15 @@ function LandingPage() {
 
       {/* ── Hero Section ── */}
       <section className="relative overflow-hidden">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-sos-blue via-sos-blue-dark to-[#003D73]" />
+        {/* Background image */}
+        <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/bg_image_sos.png')" }}>
+          <div className="absolute inset-0 bg-gradient-to-br from-sos-blue/80 via-sos-blue-dark/70 to-[#003D73]/80" />
+        </div>
 
         {/* Decorative blobs */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white/5 rounded-full translate-x-1/3 -translate-y-1/3" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-white/5 rounded-full -translate-x-1/2 translate-y-1/2" />
-        <div className="absolute top-1/2 left-1/2 w-[200px] h-[200px] bg-sos-yellow/10 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 w-[200px] h-[200px] bg-sos-coral/10 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-28 lg:pt-28 lg:pb-36">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -148,7 +153,7 @@ function LandingPage() {
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight">
                 Un foyer aimant
                 <br />
-                pour <span className="text-sos-yellow">chaque enfant</span>
+                pour <span className="text-sos-blue-lighter">chaque enfant</span>
               </h1>
 
               <p className="mt-6 text-lg text-blue-200 leading-relaxed max-w-xl">
@@ -196,9 +201,9 @@ function LandingPage() {
                 </div>
 
                 {/* Floating badge */}
-                <div className="absolute -bottom-4 -left-6 bg-sos-yellow bubble px-4 py-2 shadow-lg">
-                  <p className="text-sm font-bold text-sos-gray-900">4 Villages</p>
-                  <p className="text-xs text-sos-gray-600">actifs en Tunisie</p>
+                <div className="absolute -bottom-4 -left-6 bg-sos-coral bubble px-4 py-2 shadow-lg">
+                  <p className="text-sm font-bold text-white">4 Villages</p>
+                  <p className="text-xs text-white/90">actifs en Tunisie</p>
                 </div>
 
                 {/* Floating badge 2 */}
@@ -223,7 +228,7 @@ function LandingPage() {
       </section>
 
       {/* ── About Section ── */}
-      <section id="about" className="py-20 bg-sos-gray-50">
+      <section id="about" className="py-20 bg-white/40 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             {/* Left — content */}
@@ -264,7 +269,7 @@ function LandingPage() {
                   <p className="text-sm text-sos-gray-500 mt-1">Professionnels dédiés</p>
                 </div>
                 <div className="bg-white bubble p-4 shadow-card">
-                  <p className="text-2xl font-extrabold text-sos-yellow callout-number">100%</p>
+                  <p className="text-2xl font-extrabold text-sos-blue callout-number">100%</p>
                   <p className="text-sm text-sos-gray-500 mt-1">Engagement pour l'enfance</p>
                 </div>
               </div>
@@ -321,7 +326,7 @@ function LandingPage() {
       </section>
 
       {/* ── Services Section ── */}
-      <section id="services" className="py-20 bg-white">
+      <section id="services" className="py-20 bg-white/30 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sos-blue-light text-sos-blue text-xs font-semibold mb-4">
@@ -360,14 +365,14 @@ function LandingPage() {
               icon={Users}
               title="Renforcement familial"
               description="Programmes de soutien aux familles en difficulté pour prévenir la séparation familiale."
-              color="bg-sos-yellow"
+              color="bg-sos-coral"
             />
           </div>
         </div>
       </section>
 
       {/* ── Platform Section ── */}
-      <section id="platform" className="py-20 bg-sos-gray-50">
+      <section id="platform" className="py-20 bg-white/40 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             {/* Left */}
@@ -420,7 +425,7 @@ function LandingPage() {
                     { step: '01', label: 'Signalement terrain', desc: 'Maman SOS / Éducateur', color: 'bg-sos-blue' },
                     { step: '02', label: 'Prise en charge', desc: 'Psychologue / AS', color: 'bg-sos-green' },
                     { step: '03', label: 'Rapport DPE', desc: 'Évaluation assistée par IA', color: 'bg-[#005BA6]' },
-                    { step: '04', label: 'Plan d\'action', desc: 'Intervention structurée', color: 'bg-sos-yellow' },
+                    { step: '04', label: 'Plan d\'action', desc: 'Intervention structurée', color: 'bg-sos-coral' },
                     { step: '05', label: 'Suivi & clôture', desc: 'Gouvernance & archivage', color: 'bg-sos-red' },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-3 rounded-lg hover:bg-sos-gray-50 transition group">
@@ -453,7 +458,7 @@ function LandingPage() {
       </section>
 
       {/* ── Villages Map Section ── */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-white/30 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sos-blue-light text-sos-blue text-xs font-semibold mb-4">
@@ -473,7 +478,7 @@ function LandingPage() {
               { name: 'Gammarth', region: 'Tunis', programs: 3, color: 'border-sos-blue', icon: 'bg-sos-blue-light text-sos-blue' },
               { name: 'Siliana', region: 'Siliana', programs: 2, color: 'border-sos-green', icon: 'bg-sos-green-light text-sos-green' },
               { name: 'Mahres', region: 'Sfax', programs: 2, color: 'border-sos-red', icon: 'bg-sos-red-light text-sos-red' },
-              { name: 'Akouda', region: 'Sousse', programs: 3, color: 'border-sos-yellow', icon: 'bg-sos-yellow-light text-yellow-700' },
+              { name: 'Akouda', region: 'Sousse', programs: 3, color: 'border-sos-blue', icon: 'bg-sos-blue-light text-sos-blue' },
             ].map((v) => (
               <div key={v.name} className={`bg-white bubble shadow-card border-t-4 ${v.color} p-6 hover:shadow-card-hover transition-all`}>
                 <div className={`w-10 h-10 rounded-lg ${v.icon} flex items-center justify-center mb-4`}>
@@ -582,6 +587,7 @@ function LandingPage() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

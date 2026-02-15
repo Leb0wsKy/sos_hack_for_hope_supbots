@@ -126,6 +126,12 @@ export const exportData = (params) => api.get('/analytics/export', { params, res
 export const getAdminUsers = () => api.get('/admin/users');
 export const createAdminUser = (userData) => api.post('/admin/users', userData);
 export const updateUserStatus = (id, status) => api.put(`/admin/users/${id}/status`, status);
-export const resetUserPassword = (id) => api.put(`/admin/users/${id}/reset-password`);
+export const updateUserRole = (id, data) => api.put(`/admin/users/${id}/role`, data);
+export const resetUserPassword = (id, data) => api.put(`/admin/users/${id}/reset-password`, data);
+export const deleteAdminUser = (id) => api.delete(`/admin/users/${id}`);
+export const grantTemporaryRole = (id, data) => api.post(`/admin/users/${id}/temp-role`, data);
+export const revokeTemporaryRole = (id) => api.delete(`/admin/users/${id}/temp-role`);
+export const getAdminSignalements = (params) => api.get('/admin/signalements', { params });
+export const getAdminAuditLogs = (params) => api.get('/admin/audit-logs', { params });
 
 export default api;

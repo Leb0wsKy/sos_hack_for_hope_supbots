@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 import Village from '../models/Village.js';
+import Signalement from '../models/Signalement.js';
+import AuditLog from '../models/AuditLog.js';
 
 const sanitizeUser = (user) => {
   if (!user) return null;
@@ -124,6 +126,189 @@ export const resetUserPassword = async (req, res) => {
     await user.save();
 
     res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Update user role
+export const updateUserRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, roleDetails, village, accessibleVillages } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ message: 'role is required' });
+    }
+
+    const validRoles = ['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    // Don't allow editing your own role
+    if (id === req.user.id) {
+      return res.status(403).json({ message: 'Cannot change your own role' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.role = role;
+    if (roleDetails) user.roleDetails = roleDetails;
+    if (village) user.village = village;
+    if (accessibleVillages) user.accessibleVillages = accessibleVillages;
+
+    // Clear village for LEVEL3/LEVEL4 users
+    if (['LEVEL3', 'LEVEL4'].includes(role)) {
+      user.village = undefined;
+    }
+
+    await user.save();
+
+    const updatedUser = await User.findById(id).populate('village', 'name location');
+    res.json({ user: sanitizeUser(updatedUser) });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Delete user
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Don't allow deleting yourself
+    if (id === req.user.id) {
+      return res.status(403).json({ message: 'Cannot delete your own account' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    await User.findByIdAndDelete(id);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get all signalements (admin view)
+export const getAdminSignalements = async (req, res) => {
+  try {
+    const { status, priority, village, page = 1, limit = 50 } = req.query;
+
+    const filter = {};
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+    if (village) filter.village = village;
+
+    const total = await Signalement.countDocuments(filter);
+    const signalements = await Signalement.find(filter)
+      .populate('createdBy', 'name email role roleDetails')
+      .populate('assignedTo', 'name email role roleDetails')
+      .populate('village', 'name location region')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    res.json({
+      signalements,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get audit logs
+export const getAdminAuditLogs = async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+
+    const total = await AuditLog.countDocuments();
+    const logs = await AuditLog.find()
+      .populate('user', 'name email role')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    res.json({ logs, total, page: Number(page), pages: Math.ceil(total / limit) });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Grant temporary role to a user
+export const grantTemporaryRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, roleDetails, duration } = req.body;
+    // duration: number of hours, or null/0 for manual (no expiry)
+
+    if (!role) {
+      return res.status(400).json({ message: 'role is required' });
+    }
+
+    const validRoles = ['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    if (id === req.user.id) {
+      return res.status(403).json({ message: 'Cannot grant temporary role to yourself' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.temporaryRole = {
+      role,
+      roleDetails: roleDetails || undefined,
+      expiresAt: duration ? new Date(Date.now() + duration * 3600000) : null,
+      grantedBy: req.user.id,
+      grantedAt: new Date()
+    };
+
+    await user.save();
+
+    const updatedUser = await User.findById(id)
+      .populate('village', 'name location')
+      .populate('temporaryRole.grantedBy', 'name email');
+
+    res.json({ user: sanitizeUser(updatedUser) });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Revoke temporary role from a user
+export const revokeTemporaryRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.temporaryRole?.role) {
+      return res.status(400).json({ message: 'User has no temporary role' });
+    }
+
+    user.temporaryRole = undefined;
+    await user.save();
+
+    const updatedUser = await User.findById(id).populate('village', 'name location');
+    res.json({ user: sanitizeUser(updatedUser), message: 'Temporary role revoked' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

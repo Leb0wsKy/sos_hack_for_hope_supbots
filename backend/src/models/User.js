@@ -58,6 +58,32 @@ const userSchema = new mongoose.Schema({
   },
   lastLogin: {
     type: Date
+  },
+  // Temporary role override granted by super admin
+  temporaryRole: {
+    role: {
+      type: String,
+      enum: ['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4']
+    },
+    roleDetails: {
+      type: String,
+      enum: [
+        'SOS_MOTHER', 'EDUCATOR', 'FIELD_STAFF',
+        'PSYCHOLOGIST', 'SOCIAL_WORKER', 'VILLAGE_DIRECTOR',
+        'NATIONAL_OFFICE', 'SUPER_ADMIN'
+      ]
+    },
+    expiresAt: {
+      type: Date,
+      default: null  // null = manual removal only
+    },
+    grantedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    grantedAt: {
+      type: Date
+    }
   }
 }, {
   timestamps: true
@@ -73,6 +99,23 @@ userSchema.pre('save', async function(next) {
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Get effective role (considers temporary role)
+userSchema.methods.getEffectiveRole = function() {
+  if (this.temporaryRole && this.temporaryRole.role) {
+    // Check if expired
+    if (this.temporaryRole.expiresAt && new Date() > this.temporaryRole.expiresAt) {
+      return { role: this.role, roleDetails: this.roleDetails, isTemporary: false };
+    }
+    return {
+      role: this.temporaryRole.role,
+      roleDetails: this.temporaryRole.roleDetails || this.roleDetails,
+      isTemporary: true,
+      expiresAt: this.temporaryRole.expiresAt
+    };
+  }
+  return { role: this.role, roleDetails: this.roleDetails, isTemporary: false };
 };
 
 export default mongoose.model('User', userSchema);

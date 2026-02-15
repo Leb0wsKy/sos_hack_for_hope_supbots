@@ -77,7 +77,13 @@ export const login = async (req, res) => {
         role: user.role,
         roleDetails: user.roleDetails,
         village: user.village,
-        childrenCount: user.childrenCount || 0
+        childrenCount: user.childrenCount || 0,
+        temporaryRole: user.temporaryRole?.role ? {
+          role: user.temporaryRole.role,
+          roleDetails: user.temporaryRole.roleDetails,
+          expiresAt: user.temporaryRole.expiresAt,
+          grantedAt: user.temporaryRole.grantedAt
+        } : null
       } 
     });
 

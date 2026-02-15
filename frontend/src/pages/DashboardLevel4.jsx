@@ -4,7 +4,6 @@ import {
   UserPlus,
   Shield,
   MapPin,
-  Activity,
   Eye,
   EyeOff,
   Search,
@@ -25,15 +24,31 @@ import {
   X,
   Plus,
   Trash2,
+  FileText,
+  Edit3,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  UserCog,
+  History,
+  Timer,
+  Zap,
 } from 'lucide-react';
 import {
   getAdminUsers,
   createAdminUser,
   updateUserStatus,
+  updateUserRole,
   resetUserPassword,
+  deleteAdminUser,
+  grantTemporaryRole,
+  revokeTemporaryRole,
   getVillages,
   getAnalytics,
+  getAdminSignalements,
+  getAdminAuditLogs,
 } from '../services/api';
+import BackgroundPattern from '../components/BackgroundPattern';
 
 /* ═══════════════════════════════════════════════════════
    Constants
@@ -42,7 +57,7 @@ import {
 const ROLE_CONFIG = {
   LEVEL1: { label: 'Niveau 1 — Déclarant', color: 'bg-sos-blue-light text-sos-blue', short: 'L1' },
   LEVEL2: { label: 'Niveau 2 — Analyste', color: 'bg-sos-green-light text-sos-green', short: 'L2' },
-  LEVEL3: { label: 'Niveau 3 — Gouvernance', color: 'bg-sos-yellow-light text-yellow-700', short: 'L3' },
+  LEVEL3: { label: 'Niveau 3 — Gouvernance', color: 'bg-sos-blue-lighter text-sos-blue', short: 'L3' },
   LEVEL4: { label: 'Niveau 4 — Super Admin', color: 'bg-sos-red-light text-sos-red', short: 'L4' },
 };
 
@@ -64,6 +79,26 @@ const ROLE_DETAIL_LABELS = {
   SUPER_ADMIN: 'Super administrateur',
 };
 
+const STATUS_CONFIG = {
+  EN_ATTENTE: { label: 'En attente', color: 'bg-blue-100 text-blue-700' },
+  EN_COURS: { label: 'En cours', color: 'bg-yellow-100 text-yellow-700' },
+  CLOTURE: { label: 'Clôturé', color: 'bg-green-100 text-green-700' },
+  FAUX_SIGNALEMENT: { label: 'Faux signalement', color: 'bg-red-100 text-red-700' },
+};
+
+const PRIORITY_CONFIG = {
+  LOW: { label: 'Faible', color: 'bg-green-100 text-green-700' },
+  MEDIUM: { label: 'Moyen', color: 'bg-yellow-100 text-yellow-700' },
+  HIGH: { label: 'Élevé', color: 'bg-orange-100 text-orange-700' },
+  CRITICAL: { label: 'Critique', color: 'bg-red-100 text-red-700' },
+};
+
+const TABS = [
+  { key: 'users', label: 'Utilisateurs', icon: Users },
+  { key: 'signalements', label: 'Signalements', icon: FileText },
+  { key: 'audit', label: "Journal d'audit", icon: History },
+];
+
 /* ═══════════════════════════════════════════════════════
    Sub-components
    ═══════════════════════════════════════════════════════ */
@@ -81,12 +116,323 @@ const StatCard = ({ label, value, icon: Icon, color, bgLight }) => (
   </div>
 );
 
+/* ── Confirm Modal ── */
+const ConfirmModal = ({ open, title, message, onConfirm, onCancel, loading, danger }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${danger ? 'bg-sos-red-light' : 'bg-sos-blue-light'}`}>
+            <AlertTriangle className={`w-5 h-5 ${danger ? 'text-sos-red' : 'text-sos-blue'}`} />
+          </div>
+          <h3 className="text-lg font-bold text-sos-gray-900">{title}</h3>
+        </div>
+        <p className="text-sm text-sos-gray-600 mb-6">{message}</p>
+        <div className="flex items-center gap-3">
+          <button onClick={onConfirm} disabled={loading}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition cursor-pointer disabled:opacity-60 ${
+              danger ? 'bg-sos-red hover:bg-red-700' : 'bg-sos-blue hover:bg-sos-blue-dark'
+            }`}>
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            Confirmer
+          </button>
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-sos-gray-300 text-sos-gray-600 text-sm font-medium hover:bg-sos-gray-50 transition cursor-pointer">
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Edit Role Modal ── */
+const EditRoleModal = ({ open, user, onClose, onSubmit, villages, submitting }) => {
+  const [form, setForm] = useState({ role: '', roleDetails: '', village: '', accessibleVillages: [] });
+
+  useEffect(() => {
+    if (user) {
+      setForm({
+        role: user.role || 'LEVEL1',
+        roleDetails: user.roleDetails || '',
+        village: user.village?._id || user.village || '',
+        accessibleVillages: user.accessibleVillages?.map(v => v._id || v) || [],
+      });
+    }
+  }, [user]);
+
+  const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
+  const availableRoleDetails = ROLE_DETAILS_BY_LEVEL[form.role] || [];
+
+  useEffect(() => {
+    if (user && form.role !== user.role) {
+      setForm((p) => ({ ...p, roleDetails: '' }));
+    }
+  }, [form.role]);
+
+  const toggleAccessibleVillage = (id) => {
+    setForm((p) => {
+      const list = p.accessibleVillages.includes(id)
+        ? p.accessibleVillages.filter((v) => v !== id)
+        : [...p.accessibleVillages, id];
+      return { ...p, accessibleVillages: list };
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const payload = { role: form.role };
+    if (form.roleDetails) payload.roleDetails = form.roleDetails;
+    if (form.village) payload.village = form.village;
+    if (form.accessibleVillages.length > 0) payload.accessibleVillages = form.accessibleVillages;
+    await onSubmit(user._id, payload);
+  };
+
+  if (!open || !user) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-sos-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sos-blue-light flex items-center justify-center">
+              <UserCog className="w-5 h-5 text-sos-blue" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-sos-gray-900">Modifier le rôle</h2>
+              <p className="text-xs text-sos-gray-500">{user.name} — {user.email}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-sos-gray-100 transition cursor-pointer">
+            <X className="w-5 h-5 text-sos-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Role */}
+          <div>
+            <label className="block text-sm font-medium text-sos-gray-700 mb-1">Rôle *</label>
+            <select value={form.role} onChange={set('role')}
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
+              {Object.entries(ROLE_CONFIG).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Role Details */}
+          {availableRoleDetails.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Sous-rôle</label>
+              <select value={form.roleDetails} onChange={set('roleDetails')}
+                className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
+                <option value="">— Sélectionner —</option>
+                {availableRoleDetails.map((rd) => (
+                  <option key={rd} value={rd}>{ROLE_DETAIL_LABELS[rd] || rd}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Village (required for L1/L2) */}
+          {['LEVEL1', 'LEVEL2'].includes(form.role) && (
+            <div>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Village *</label>
+              <select value={form.village} onChange={set('village')}
+                className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
+                <option value="">— Sélectionner —</option>
+                {villages.map((v) => (
+                  <option key={v._id} value={v._id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Accessible Villages */}
+          {['LEVEL2', 'LEVEL3'].includes(form.role) && villages.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Villages accessibles</label>
+              <div className="max-h-36 overflow-y-auto border border-sos-gray-200 rounded-lg p-2 space-y-1 custom-scrollbar">
+                {villages.map((v) => (
+                  <label key={v._id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sos-gray-50 cursor-pointer text-sm">
+                    <input type="checkbox" checked={form.accessibleVillages.includes(v._id)} onChange={() => toggleAccessibleVillage(v._id)}
+                      className="accent-sos-blue w-4 h-4" />
+                    <span className="text-sos-gray-700">{v.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center gap-3">
+            <button type="submit" disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-sos-blue text-white font-semibold text-sm hover:bg-sos-blue-dark active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
+              Enregistrer
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2.5 rounded-xl border border-sos-gray-300 text-sos-gray-600 text-sm font-medium hover:bg-sos-gray-50 transition cursor-pointer">
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* ── Grant Temporary Role Modal ── */
+const TempRoleModal = ({ open, user, onClose, onSubmit, submitting }) => {
+  const [form, setForm] = useState({ role: 'LEVEL2', roleDetails: '', durationType: 'manual', durationHours: 48 });
+
+  const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
+  const availableRoleDetails = ROLE_DETAILS_BY_LEVEL[form.role] || [];
+
+  useEffect(() => {
+    setForm((p) => ({ ...p, roleDetails: '' }));
+  }, [form.role]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const payload = { role: form.role };
+    if (form.roleDetails) payload.roleDetails = form.roleDetails;
+    payload.duration = form.durationType === 'manual' ? 0 : Number(form.durationHours);
+    await onSubmit(user._id, payload);
+  };
+
+  if (!open || !user) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-sos-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+              <Timer className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-sos-gray-900">Rôle temporaire</h2>
+              <p className="text-xs text-sos-gray-500">{user.name} — {user.email}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-sos-gray-100 transition cursor-pointer">
+            <X className="w-5 h-5 text-sos-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            <p className="font-medium">Rôle actuel : {ROLE_CONFIG[user.role]?.label}</p>
+            <p className="text-xs mt-0.5">Le rôle temporaire remplace le rôle permanent tant qu'il est actif.</p>
+          </div>
+
+          {/* Temp Role */}
+          <div>
+            <label className="block text-sm font-medium text-sos-gray-700 mb-1">Rôle temporaire *</label>
+            <select value={form.role} onChange={set('role')}
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition">
+              {Object.entries(ROLE_CONFIG).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Temp Role Details */}
+          {availableRoleDetails.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Sous-rôle</label>
+              <select value={form.roleDetails} onChange={set('roleDetails')}
+                className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition">
+                <option value="">— Sélectionner —</option>
+                {availableRoleDetails.map((rd) => (
+                  <option key={rd} value={rd}>{ROLE_DETAIL_LABELS[rd] || rd}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Duration type */}
+          <div>
+            <label className="block text-sm font-medium text-sos-gray-700 mb-2">Durée</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setForm((p) => ({ ...p, durationType: 'timed' }))}
+                className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium border transition cursor-pointer ${
+                  form.durationType === 'timed'
+                    ? 'border-amber-400 bg-amber-50 text-amber-700'
+                    : 'border-sos-gray-300 text-sos-gray-500 hover:bg-sos-gray-50'
+                }`}>
+                <Timer className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                Limité dans le temps
+              </button>
+              <button type="button" onClick={() => setForm((p) => ({ ...p, durationType: 'manual' }))}
+                className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium border transition cursor-pointer ${
+                  form.durationType === 'manual'
+                    ? 'border-amber-400 bg-amber-50 text-amber-700'
+                    : 'border-sos-gray-300 text-sos-gray-500 hover:bg-sos-gray-50'
+                }`}>
+                <Zap className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                Jusqu'à révocation
+              </button>
+            </div>
+          </div>
+
+          {/* Duration hours */}
+          {form.durationType === 'timed' && (
+            <div>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Durée (en heures)</label>
+              <div className="flex gap-2">
+                {[12, 24, 48, 72, 168].map((h) => (
+                  <button key={h} type="button"
+                    onClick={() => setForm((p) => ({ ...p, durationHours: h }))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                      form.durationHours === h
+                        ? 'border-amber-400 bg-amber-50 text-amber-700'
+                        : 'border-sos-gray-200 text-sos-gray-500 hover:bg-sos-gray-50'
+                    }`}>
+                    {h < 24 ? `${h}h` : `${h / 24}j`}
+                  </button>
+                ))}
+              </div>
+              <input type="number" min="1" max="8760" value={form.durationHours}
+                onChange={(e) => setForm((p) => ({ ...p, durationHours: e.target.value }))}
+                className="mt-2 w-full px-3 py-2 rounded-lg border border-sos-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400" />
+              <p className="text-xs text-sos-gray-400 mt-1">
+                Expire le {new Date(Date.now() + Number(form.durationHours) * 3600000).toLocaleString('fr-FR')}
+              </p>
+            </div>
+          )}
+
+          {form.durationType === 'manual' && (
+            <div className="bg-sos-blue-light/50 border border-sos-blue/10 rounded-lg px-4 py-3 text-xs text-sos-blue">
+              Le rôle restera actif jusqu'à ce que vous le révoquez manuellement.
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center gap-3">
+            <button type="submit" disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 text-white font-semibold text-sm hover:bg-amber-600 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Timer className="w-4 h-4" />}
+              Accorder le rôle
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2.5 rounded-xl border border-sos-gray-300 text-sos-gray-600 text-sm font-medium hover:bg-sos-gray-50 transition cursor-pointer">
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 /* ── User Row ── */
-const UserRow = ({ user, onToggleStatus, onResetPassword, loadingId }) => {
+const UserRow = ({ user, onToggleStatus, onResetPassword, onEditRole, onDelete, onGrantTempRole, onRevokeTempRole, loadingId, currentUserId }) => {
   const [showReset, setShowReset] = useState(false);
   const [newPwd, setNewPwd] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const roleCfg = ROLE_CONFIG[user.role] || ROLE_CONFIG.LEVEL1;
+  const isSelf = user._id === currentUserId;
 
   const handleReset = () => {
     if (!newPwd.trim()) return;
@@ -106,10 +452,11 @@ const UserRow = ({ user, onToggleStatus, onResetPassword, loadingId }) => {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-semibold text-sos-gray-900 truncate">{user.name}</p>
+              {isSelf && (
+                <span className="text-[10px] font-bold bg-sos-blue-light text-sos-blue px-1.5 py-0.5 rounded-full">VOUS</span>
+              )}
               {!user.isActive && (
-                <span className="text-[10px] font-bold bg-sos-red-light text-sos-red px-1.5 py-0.5 rounded-full">
-                  DÉSACTIVÉ
-                </span>
+                <span className="text-[10px] font-bold bg-sos-red-light text-sos-red px-1.5 py-0.5 rounded-full">DÉSACTIVÉ</span>
               )}
             </div>
             <p className="text-xs text-sos-gray-500 truncate">{user.email}</p>
@@ -133,69 +480,100 @@ const UserRow = ({ user, onToggleStatus, onResetPassword, loadingId }) => {
                 </span>
               )}
             </div>
+
+            {/* Temporary role badge */}
+            {user.temporaryRole?.role && (
+              <div className="mt-1.5 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                <Timer className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <div className="text-xs">
+                  <span className="font-semibold text-amber-700">Rôle temp : {ROLE_CONFIG[user.temporaryRole.role]?.label}</span>
+                  {user.temporaryRole.expiresAt ? (
+                    <span className="text-amber-600 ml-1.5">
+                      — expire le {new Date(user.temporaryRole.expiresAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                  ) : (
+                    <span className="text-amber-500 ml-1.5">— jusqu'à révocation</span>
+                  )}
+                </div>
+                {!isSelf && (
+                  <button onClick={(e) => { e.stopPropagation(); onRevokeTempRole(user._id); }}
+                    title="Révoquer le rôle temporaire"
+                    className="ml-auto p-1 rounded text-amber-600 hover:bg-amber-100 transition cursor-pointer">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Grant temp role */}
+          {!isSelf && (
+            <button onClick={() => onGrantTempRole(user)} title="Rôle temporaire"
+              className={`p-2 rounded-lg transition cursor-pointer ${
+                user.temporaryRole?.role
+                  ? 'text-amber-600 bg-amber-50 hover:bg-amber-100'
+                  : 'text-sos-gray-400 hover:text-amber-600 hover:bg-amber-50'
+              }`}>
+              <Timer className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Edit role */}
+          {!isSelf && (
+            <button onClick={() => onEditRole(user)} title="Modifier le rôle"
+              className="p-2 rounded-lg text-sos-gray-400 hover:text-sos-blue hover:bg-sos-blue-light transition cursor-pointer">
+              <Edit3 className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Toggle active */}
-          <button
-            onClick={() => onToggleStatus(user._id, !user.isActive)}
-            disabled={loadingId === user._id}
-            title={user.isActive ? 'Désactiver' : 'Activer'}
-            className={`p-2 rounded-lg transition cursor-pointer disabled:opacity-50 ${
-              user.isActive
-                ? 'text-sos-green hover:bg-sos-green-light'
-                : 'text-sos-red hover:bg-sos-red-light'
-            }`}
-          >
-            {user.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-          </button>
+          {!isSelf && (
+            <button onClick={() => onToggleStatus(user._id, !user.isActive)} disabled={loadingId === user._id}
+              title={user.isActive ? 'Désactiver' : 'Activer'}
+              className={`p-2 rounded-lg transition cursor-pointer disabled:opacity-50 ${
+                user.isActive ? 'text-sos-green hover:bg-sos-green-light' : 'text-sos-red hover:bg-sos-red-light'
+              }`}>
+              {user.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+            </button>
+          )}
 
           {/* Reset password */}
-          <button
-            onClick={() => setShowReset(!showReset)}
-            title="Réinitialiser mot de passe"
-            className="p-2 rounded-lg text-sos-gray-400 hover:text-sos-blue hover:bg-sos-blue-light transition cursor-pointer"
-          >
+          <button onClick={() => setShowReset(!showReset)} title="Réinitialiser mot de passe"
+            className="p-2 rounded-lg text-sos-gray-400 hover:text-sos-blue hover:bg-sos-blue-light transition cursor-pointer">
             <Key className="w-5 h-5" />
           </button>
+
+          {/* Delete */}
+          {!isSelf && (
+            <button onClick={() => onDelete(user)} title="Supprimer"
+              className="p-2 rounded-lg text-sos-gray-400 hover:text-sos-red hover:bg-sos-red-light transition cursor-pointer">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Password reset form (expandable) */}
+      {/* Password reset form */}
       {showReset && (
         <div className="mt-3 pt-3 border-t border-sos-gray-100 flex items-center gap-2 animate-fade-in">
           <div className="relative flex-1">
-            <input
-              type={showPwd ? 'text' : 'password'}
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
+            <input type={showPwd ? 'text' : 'password'} value={newPwd} onChange={(e) => setNewPwd(e.target.value)}
               placeholder="Nouveau mot de passe"
-              className="w-full pl-3 pr-9 py-2 rounded-lg border border-sos-gray-300 text-sm
-                         placeholder:text-sos-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPwd(!showPwd)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sos-gray-400 hover:text-sos-gray-600"
-            >
+              className="w-full pl-3 pr-9 py-2 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue" />
+            <button type="button" onClick={() => setShowPwd(!showPwd)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sos-gray-400 hover:text-sos-gray-600">
               {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <button
-            onClick={handleReset}
-            disabled={!newPwd.trim() || loadingId === user._id}
-            className="px-4 py-2 rounded-lg bg-sos-blue text-white text-sm font-medium
-                       hover:bg-sos-blue-dark transition disabled:opacity-50 cursor-pointer"
-          >
+          <button onClick={handleReset} disabled={!newPwd.trim() || loadingId === user._id}
+            className="px-4 py-2 rounded-lg bg-sos-blue text-white text-sm font-medium hover:bg-sos-blue-dark transition disabled:opacity-50 cursor-pointer">
             Réinitialiser
           </button>
-          <button
-            onClick={() => { setShowReset(false); setNewPwd(''); }}
-            className="p-2 rounded-lg text-sos-gray-400 hover:bg-sos-gray-100 transition cursor-pointer"
-          >
+          <button onClick={() => { setShowReset(false); setNewPwd(''); }}
+            className="p-2 rounded-lg text-sos-gray-400 hover:bg-sos-gray-100 transition cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -207,23 +585,14 @@ const UserRow = ({ user, onToggleStatus, onResetPassword, loadingId }) => {
 /* ── Create User Modal ── */
 const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
   const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'LEVEL1',
-    roleDetails: '',
-    village: '',
-    phone: '',
-    accessibleVillages: [],
+    name: '', email: '', password: '', role: 'LEVEL1', roleDetails: '', village: '', phone: '', accessibleVillages: [],
   });
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState('');
 
   const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
-
   const availableRoleDetails = ROLE_DETAILS_BY_LEVEL[form.role] || [];
 
-  // Reset roleDetails when role changes
   useEffect(() => {
     setForm((p) => ({ ...p, roleDetails: '' }));
   }, [form.role]);
@@ -241,12 +610,7 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
       return;
     }
 
-    const payload = {
-      name: form.name,
-      email: form.email,
-      password: form.password,
-      role: form.role,
-    };
+    const payload = { name: form.name, email: form.email, password: form.password, role: form.role };
     if (form.roleDetails) payload.roleDetails = form.roleDetails;
     if (form.village) payload.village = form.village;
     if (form.phone) payload.phone = form.phone;
@@ -272,10 +636,7 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-sos-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <div className="flex items-center gap-3">
@@ -301,46 +662,25 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">Nom complet *</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={set('name')}
-              placeholder="Prénom et nom"
-              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-            />
+            <input type="text" value={form.name} onChange={set('name')} placeholder="Prénom et nom"
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition" />
           </div>
 
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">Adresse email *</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={set('email')}
-              placeholder="prenom.nom@sos-kd.org"
-              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-            />
+            <input type="email" value={form.email} onChange={set('email')} placeholder="prenom.nom@sos-kd.org"
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition" />
           </div>
 
           {/* Password */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">Mot de passe *</label>
             <div className="relative">
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={form.password}
-                onChange={set('password')}
-                placeholder="Min. 8 caractères"
-                className="w-full px-3 py-2.5 pr-10 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400
-                           focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd(!showPwd)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sos-gray-400 hover:text-sos-gray-600"
-              >
+              <input type={showPwd ? 'text' : 'password'} value={form.password} onChange={set('password')} placeholder="Min. 8 caractères"
+                className="w-full px-3 py-2.5 pr-10 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition" />
+              <button type="button" onClick={() => setShowPwd(!showPwd)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sos-gray-400 hover:text-sos-gray-600">
                 {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
@@ -349,25 +689,15 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
           {/* Phone */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">Téléphone</label>
-            <input
-              type="tel"
-              value={form.phone}
-              onChange={set('phone')}
-              placeholder="+216 XX XXX XXX"
-              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-            />
+            <input type="tel" value={form.phone} onChange={set('phone')} placeholder="+216 XX XXX XXX"
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition" />
           </div>
 
           {/* Role */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">Rôle *</label>
-            <select
-              value={form.role}
-              onChange={set('role')}
-              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-            >
+            <select value={form.role} onChange={set('role')}
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
               {Object.entries(ROLE_CONFIG).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
@@ -378,12 +708,8 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
           {availableRoleDetails.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-sos-gray-700 mb-1">Sous-rôle</label>
-              <select
-                value={form.roleDetails}
-                onChange={set('roleDetails')}
-                className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white
-                           focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-              >
+              <select value={form.roleDetails} onChange={set('roleDetails')}
+                className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
                 <option value="">— Sélectionner —</option>
                 {availableRoleDetails.map((rd) => (
                   <option key={rd} value={rd}>{ROLE_DETAIL_LABELS[rd] || rd}</option>
@@ -392,17 +718,13 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
             </div>
           )}
 
-          {/* Village (required for L1/L2) */}
+          {/* Village */}
           <div>
             <label className="block text-sm font-medium text-sos-gray-700 mb-1">
               Village {['LEVEL1', 'LEVEL2'].includes(form.role) ? '*' : ''}
             </label>
-            <select
-              value={form.village}
-              onChange={set('village')}
-              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white
-                         focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-            >
+            <select value={form.village} onChange={set('village')}
+              className="w-full px-3 py-2.5 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition">
               <option value="">— Aucun —</option>
               {villages.map((v) => (
                 <option key={v._id} value={v._id}>{v.name} — {v.location}</option>
@@ -410,21 +732,15 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
             </select>
           </div>
 
-          {/* Accessible Villages (for L2/L3) */}
+          {/* Accessible Villages */}
           {['LEVEL2', 'LEVEL3'].includes(form.role) && villages.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-sos-gray-700 mb-1">
-                Villages accessibles
-              </label>
+              <label className="block text-sm font-medium text-sos-gray-700 mb-1">Villages accessibles</label>
               <div className="max-h-36 overflow-y-auto border border-sos-gray-200 rounded-lg p-2 space-y-1 custom-scrollbar">
                 {villages.map((v) => (
                   <label key={v._id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sos-gray-50 cursor-pointer text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.accessibleVillages.includes(v._id)}
-                      onChange={() => toggleAccessibleVillage(v._id)}
-                      className="accent-sos-blue w-4 h-4"
-                    />
+                    <input type="checkbox" checked={form.accessibleVillages.includes(v._id)} onChange={() => toggleAccessibleVillage(v._id)}
+                      className="accent-sos-blue w-4 h-4" />
                     <span className="text-sos-gray-700">{v.name}</span>
                     <span className="text-sos-gray-400 text-xs ml-auto">{v.location}</span>
                   </label>
@@ -435,23 +751,13 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
 
           {/* Submit */}
           <div className="pt-2 flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl
-                         bg-sos-blue text-white font-semibold text-sm
-                         hover:bg-sos-blue-dark active:scale-[0.98] transition-all
-                         disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
+            <button type="submit" disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-sos-blue text-white font-semibold text-sm hover:bg-sos-blue-dark active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Créer l'utilisateur
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-sos-gray-300 text-sos-gray-600 text-sm font-medium
-                         hover:bg-sos-gray-50 transition cursor-pointer"
-            >
+            <button type="button" onClick={onClose}
+              className="px-4 py-2.5 rounded-xl border border-sos-gray-300 text-sos-gray-600 text-sm font-medium hover:bg-sos-gray-50 transition cursor-pointer">
               Annuler
             </button>
           </div>
@@ -461,21 +767,123 @@ const CreateUserModal = ({ open, onClose, onSubmit, villages, submitting }) => {
   );
 };
 
+/* ── Signalement Row ── */
+const SignalementRow = ({ sig }) => {
+  const [expanded, setExpanded] = useState(false);
+  const statusCfg = STATUS_CONFIG[sig.status] || { label: sig.status, color: 'bg-gray-100 text-gray-600' };
+  const priorityCfg = PRIORITY_CONFIG[sig.priority] || { label: sig.priority || '—', color: 'bg-gray-100 text-gray-600' };
+
+  return (
+    <div className="bg-white border border-sos-gray-200 rounded-xl p-4 hover:shadow-card-hover transition-all">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCfg.color}`}>
+              {statusCfg.label}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${priorityCfg.color}`}>
+              {priorityCfg.label}
+            </span>
+            {sig.category && (
+              <span className="text-xs text-sos-gray-500">• {sig.category}</span>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-sos-gray-900 truncate">
+            {sig.description?.substring(0, 100) || 'Signalement'}
+            {sig.description?.length > 100 ? '…' : ''}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-sos-gray-400">
+            {sig.village && (
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {sig.village.name}
+              </span>
+            )}
+            {sig.reportedBy && (
+              <span className="flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {sig.reportedBy.name}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {new Date(sig.createdAt).toLocaleDateString('fr-FR')}
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0">
+          {expanded ? <ChevronUp className="w-5 h-5 text-sos-gray-400" /> : <ChevronDown className="w-5 h-5 text-sos-gray-400" />}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-sos-gray-100 animate-fade-in space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-sos-gray-500 text-xs font-medium">Description complète</p>
+              <p className="text-sos-gray-700">{sig.description || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sos-gray-500 text-xs font-medium">Assigné à</p>
+              <p className="text-sos-gray-700">{sig.assignedTo?.name || 'Non assigné'}</p>
+            </div>
+            {sig.childAge && (
+              <div>
+                <p className="text-sos-gray-500 text-xs font-medium">Âge de l'enfant</p>
+                <p className="text-sos-gray-700">{sig.childAge} ans</p>
+              </div>
+            )}
+            {sig.childGender && (
+              <div>
+                <p className="text-sos-gray-500 text-xs font-medium">Genre</p>
+                <p className="text-sos-gray-700">{sig.childGender === 'M' ? 'Masculin' : 'Féminin'}</p>
+              </div>
+            )}
+            {sig.closureReason && (
+              <div className="sm:col-span-2">
+                <p className="text-sos-gray-500 text-xs font-medium">Raison de clôture</p>
+                <p className="text-sos-gray-700">{sig.closureReason}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ═══════════════════════════════════════════════════════
    Main Dashboard
    ═══════════════════════════════════════════════════════ */
 function DashboardLevel4() {
+  const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [villages, setVillages] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [signalements, setSignalements] = useState([]);
+  const [sigTotal, setSigTotal] = useState(0);
+  const [sigPage, setSigPage] = useState(1);
+  const [sigPages, setSigPages] = useState(1);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPages, setAuditPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState('');
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterActive, setFilterActive] = useState('');
+  const [filterSigStatus, setFilterSigStatus] = useState('');
+  const [filterSigPriority, setFilterSigPriority] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [editRoleUser, setEditRoleUser] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [tempRoleUser, setTempRoleUser] = useState(null);
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -483,42 +891,65 @@ function DashboardLevel4() {
   };
 
   /* ── Data fetching ── */
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchUsers = useCallback(async () => {
     try {
       const params = {};
       if (filterRole) params.role = filterRole;
       if (filterActive) params.isActive = filterActive;
-
-      const [usersRes, villagesRes, analyticsRes] = await Promise.all([
-        getAdminUsers(params),
-        getVillages(),
-        getAnalytics(),
-      ]);
-
-      const userList = usersRes.data?.users || [];
-      setUsers(userList);
-
-      const vList = Array.isArray(villagesRes.data) ? villagesRes.data : villagesRes.data?.villages || [];
-      setVillages(vList);
-
-      setAnalytics(analyticsRes.data);
-    } catch {
-      /* ignore */
-    }
-    setLoading(false);
+      const res = await getAdminUsers(params);
+      setUsers(res.data?.users || []);
+    } catch { /* ignore */ }
   }, [filterRole, filterActive]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchVillagesAndAnalytics = useCallback(async () => {
+    try {
+      const [villagesRes, analyticsRes] = await Promise.all([getVillages(), getAnalytics()]);
+      const vList = Array.isArray(villagesRes.data) ? villagesRes.data : villagesRes.data?.villages || [];
+      setVillages(vList);
+      setAnalytics(analyticsRes.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchSignalements = useCallback(async (page = 1) => {
+    try {
+      const params = { page, limit: 20 };
+      if (filterSigStatus) params.status = filterSigStatus;
+      if (filterSigPriority) params.priority = filterSigPriority;
+      const res = await getAdminSignalements(params);
+      setSignalements(res.data?.signalements || []);
+      setSigTotal(res.data?.total || 0);
+      setSigPage(res.data?.page || 1);
+      setSigPages(res.data?.pages || 1);
+    } catch { /* ignore */ }
+  }, [filterSigStatus, filterSigPriority]);
+
+  const fetchAuditLogs = useCallback(async (page = 1) => {
+    try {
+      const res = await getAdminAuditLogs({ page, limit: 30 });
+      setAuditLogs(res.data?.logs || []);
+      setAuditTotal(res.data?.total || 0);
+      setAuditPage(res.data?.page || 1);
+      setAuditPages(res.data?.pages || 1);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchUsers(), fetchVillagesAndAnalytics(), fetchSignalements(), fetchAuditLogs()]);
+    setLoading(false);
+  }, [fetchUsers, fetchVillagesAndAnalytics, fetchSignalements, fetchAuditLogs]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Refetch signalements when filters change
+  useEffect(() => { if (!loading) fetchSignalements(); }, [filterSigStatus, filterSigPriority]);
 
   /* ── Actions ── */
   const handleToggleStatus = async (id, isActive) => {
     setLoadingId(id);
     try {
       await updateUserStatus(id, { isActive });
-      setUsers((prev) =>
-        prev.map((u) => (u._id === id ? { ...u, isActive } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u._id === id ? { ...u, isActive } : u)));
       showToast(isActive ? 'Utilisateur activé' : 'Utilisateur désactivé');
     } catch (err) {
       showToast(err.response?.data?.message || 'Erreur', 'error');
@@ -542,7 +973,7 @@ function DashboardLevel4() {
     try {
       await createAdminUser(payload);
       showToast('Utilisateur créé avec succès');
-      fetchData();
+      fetchUsers();
       setSubmitting(false);
       return true;
     } catch (err) {
@@ -552,7 +983,59 @@ function DashboardLevel4() {
     }
   };
 
-  /* ── Filtering (client-side search over already-fetched list) ── */
+  const handleUpdateRole = async (id, payload) => {
+    setSubmitting(true);
+    try {
+      await updateUserRole(id, payload);
+      showToast('Rôle mis à jour avec succès');
+      fetchUsers();
+      setEditRoleUser(null);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Erreur lors de la mise à jour', 'error');
+    }
+    setSubmitting(false);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      await deleteAdminUser(deleteConfirm._id);
+      showToast('Utilisateur supprimé');
+      setUsers((prev) => prev.filter((u) => u._id !== deleteConfirm._id));
+      setDeleteConfirm(null);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Erreur lors de la suppression', 'error');
+    }
+    setDeleteLoading(false);
+  };
+
+  const handleGrantTempRole = async (id, payload) => {
+    setSubmitting(true);
+    try {
+      await grantTemporaryRole(id, payload);
+      showToast('Rôle temporaire accordé');
+      fetchUsers();
+      setTempRoleUser(null);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Erreur', 'error');
+    }
+    setSubmitting(false);
+  };
+
+  const handleRevokeTempRole = async (id) => {
+    setLoadingId(id);
+    try {
+      await revokeTemporaryRole(id);
+      showToast('Rôle temporaire révoqué');
+      setUsers((prev) => prev.map((u) => u._id === id ? { ...u, temporaryRole: undefined } : u));
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Erreur', 'error');
+    }
+    setLoadingId('');
+  };
+
+  /* ── Filtering (client-side search) ── */
   const filtered = users.filter((u) => {
     if (search) {
       const q = search.toLowerCase();
@@ -574,7 +1057,10 @@ function DashboardLevel4() {
   const ov = analytics?.overview || {};
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 pb-12">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden pb-12">
+      <BackgroundPattern />
+      <div className="relative z-10">
+
       {/* ── Toast ── */}
       {toast && (
         <div className={`fixed top-20 right-6 z-[60] flex items-center gap-2 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in ${
@@ -592,22 +1078,25 @@ function DashboardLevel4() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-sos-gray-900">Super Administration</h1>
-              <p className="text-sm text-sos-gray-500">Gestion des utilisateurs, villages et vue système</p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sos-red-light flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-sos-red" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-sos-gray-900">Super Administration</h1>
+                  <p className="text-sm text-sos-gray-500">
+                    Bienvenue, {currentUser.name || 'Admin'} — Contrôle complet du système
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={fetchData}
-                className="p-2 rounded-lg hover:bg-sos-gray-100 transition cursor-pointer"
-                title="Rafraîchir"
-              >
+              <button onClick={fetchAll}
+                className="p-2 rounded-lg hover:bg-sos-gray-100 transition cursor-pointer" title="Rafraîchir">
                 <RefreshCw className={`w-4 h-4 text-sos-gray-500 ${loading ? 'animate-spin' : ''}`} />
               </button>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sos-blue text-white text-sm font-medium
-                           hover:bg-sos-blue-dark transition cursor-pointer"
-              >
+              <button onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sos-blue text-white text-sm font-medium hover:bg-sos-blue-dark transition cursor-pointer">
                 <UserPlus className="w-4 h-4" />
                 <span className="hidden sm:inline">Créer un utilisateur</span>
                 <span className="sm:hidden">Créer</span>
@@ -629,8 +1118,8 @@ function DashboardLevel4() {
             <StatCard label="Actifs" value={activeCount} icon={CheckCircle2} color="text-sos-green" bgLight="bg-sos-green-light" />
             <StatCard label="Inactifs" value={inactiveCount} icon={XCircle} color="text-sos-red" bgLight="bg-sos-red-light" />
             <StatCard label="Villages" value={villages.length} icon={Building2} color="text-sos-brown" bgLight="bg-sos-brown-light" />
-            <StatCard label="Signalements" value={ov.total ?? '—'} icon={BarChart3} color="text-sos-blue" bgLight="bg-sos-blue-light" />
-            <StatCard label="En attente" value={ov.enAttente ?? '—'} icon={Clock} color="text-yellow-700" bgLight="bg-sos-yellow-light" />
+            <StatCard label="Signalements" value={ov.total ?? sigTotal ?? '—'} icon={BarChart3} color="text-sos-blue" bgLight="bg-sos-blue-light" />
+            <StatCard label="En attente" value={ov.enAttente ?? '—'} icon={Clock} color="text-sos-blue" bgLight="bg-sos-blue-lighter" />
           </div>
 
           {/* ═══ Row 2: Role breakdown pills ═══ */}
@@ -643,86 +1132,233 @@ function DashboardLevel4() {
             ))}
           </div>
 
-          {/* ═══ Row 3: Filters + User List ═══ */}
-          <div className="bg-white border border-sos-gray-200 rounded-xl shadow-card overflow-hidden">
-            {/* Toolbar */}
-            <div className="px-5 py-4 border-b border-sos-gray-100 flex flex-col sm:flex-row gap-3">
-              {/* Search */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sos-gray-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Rechercher un utilisateur…"
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400
-                             focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition"
-                />
-              </div>
+          {/* ═══ Tabs ═══ */}
+          <div className="flex gap-1 bg-white border border-sos-gray-200 rounded-xl p-1 shadow-card">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.key;
+              return (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition cursor-pointer ${
+                    isActive
+                      ? 'bg-sos-blue text-white shadow-sm'
+                      : 'text-sos-gray-500 hover:text-sos-gray-700 hover:bg-sos-gray-50'
+                  }`}>
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-              {/* Role filter */}
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-sos-gray-400" />
-                <select
-                  value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
-                  className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white
-                             focus:outline-none focus:ring-2 focus:ring-sos-blue/40"
-                >
-                  <option value="">Tous les rôles</option>
-                  {Object.entries(ROLE_CONFIG).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
+          {/* ═══ Tab Content ═══ */}
+
+          {/* ──── USERS TAB ──── */}
+          {activeTab === 'users' && (
+            <div className="bg-white border border-sos-gray-200 rounded-xl shadow-card overflow-hidden">
+              {/* Toolbar */}
+              <div className="px-5 py-4 border-b border-sos-gray-100 flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sos-gray-400" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Rechercher un utilisateur…"
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-sos-gray-300 text-sm placeholder:text-sos-gray-400 focus:outline-none focus:ring-2 focus:ring-sos-blue/40 focus:border-sos-blue transition" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-sos-gray-400" />
+                  <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40">
+                    <option value="">Tous les rôles</option>
+                    {Object.entries(ROLE_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <select value={filterActive} onChange={(e) => setFilterActive(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40">
+                  <option value="">Tous les statuts</option>
+                  <option value="true">Actifs</option>
+                  <option value="false">Inactifs</option>
                 </select>
               </div>
 
-              {/* Active filter */}
-              <select
-                value={filterActive}
-                onChange={(e) => setFilterActive(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white
-                           focus:outline-none focus:ring-2 focus:ring-sos-blue/40"
-              >
-                <option value="">Tous les statuts</option>
-                <option value="true">Actifs</option>
-                <option value="false">Inactifs</option>
-              </select>
-            </div>
+              {/* User list */}
+              <div className="p-4 space-y-3 max-h-[calc(100vh-30rem)] overflow-y-auto custom-scrollbar">
+                {filtered.length === 0 && (
+                  <div className="text-center py-12">
+                    <Users className="w-12 h-12 text-sos-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-sos-gray-400">Aucun utilisateur trouvé</p>
+                  </div>
+                )}
+                {filtered.map((u) => (
+                  <UserRow key={u._id} user={u}
+                    onToggleStatus={handleToggleStatus}
+                    onResetPassword={handleResetPassword}
+                    onEditRole={(user) => setEditRoleUser(user)}
+                    onDelete={(user) => setDeleteConfirm(user)}
+                    onGrantTempRole={(user) => setTempRoleUser(user)}
+                    onRevokeTempRole={handleRevokeTempRole}
+                    loadingId={loadingId}
+                    currentUserId={currentUser.id}
+                  />
+                ))}
+              </div>
 
-            {/* User list */}
-            <div className="p-4 space-y-3 max-h-[calc(100vh-26rem)] overflow-y-auto custom-scrollbar">
-              {filtered.length === 0 && (
-                <div className="text-center py-12">
-                  <Users className="w-12 h-12 text-sos-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-sos-gray-400">Aucun utilisateur trouvé</p>
+              {/* Footer */}
+              <div className="px-5 py-3 border-t border-sos-gray-100 bg-sos-gray-50 text-xs text-sos-gray-400">
+                {filtered.length} utilisateur{filtered.length !== 1 ? 's' : ''} affiché{filtered.length !== 1 ? 's' : ''} sur {users.length} total
+              </div>
+            </div>
+          )}
+
+          {/* ──── SIGNALEMENTS TAB ──── */}
+          {activeTab === 'signalements' && (
+            <div className="bg-white border border-sos-gray-200 rounded-xl shadow-card overflow-hidden">
+              {/* Toolbar */}
+              <div className="px-5 py-4 border-b border-sos-gray-100 flex flex-col sm:flex-row gap-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-sos-gray-400" />
+                  <select value={filterSigStatus} onChange={(e) => { setFilterSigStatus(e.target.value); setSigPage(1); }}
+                    className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40">
+                    <option value="">Tous les statuts</option>
+                    {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                  <select value={filterSigPriority} onChange={(e) => { setFilterSigPriority(e.target.value); setSigPage(1); }}
+                    className="px-3 py-2 rounded-lg border border-sos-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sos-blue/40">
+                    <option value="">Toutes priorités</option>
+                    {Object.entries(PRIORITY_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ml-auto text-sm text-sos-gray-500">
+                  {sigTotal} signalement{sigTotal !== 1 ? 's' : ''} au total
+                </div>
+              </div>
+
+              {/* List */}
+              <div className="p-4 space-y-3 max-h-[calc(100vh-30rem)] overflow-y-auto custom-scrollbar">
+                {signalements.length === 0 && (
+                  <div className="text-center py-12">
+                    <FileText className="w-12 h-12 text-sos-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-sos-gray-400">Aucun signalement trouvé</p>
+                  </div>
+                )}
+                {signalements.map((s) => (
+                  <SignalementRow key={s._id} sig={s} />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {sigPages > 1 && (
+                <div className="px-5 py-3 border-t border-sos-gray-100 bg-sos-gray-50 flex items-center justify-between">
+                  <button disabled={sigPage <= 1}
+                    onClick={() => { const p = sigPage - 1; setSigPage(p); fetchSignalements(p); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-sos-gray-600 hover:bg-white transition disabled:opacity-40 cursor-pointer">
+                    <ChevronLeft className="w-4 h-4" /> Précédent
+                  </button>
+                  <span className="text-xs text-sos-gray-400">Page {sigPage} sur {sigPages}</span>
+                  <button disabled={sigPage >= sigPages}
+                    onClick={() => { const p = sigPage + 1; setSigPage(p); fetchSignalements(p); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-sos-gray-600 hover:bg-white transition disabled:opacity-40 cursor-pointer">
+                    Suivant <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               )}
-              {filtered.map((u) => (
-                <UserRow
-                  key={u._id}
-                  user={u}
-                  onToggleStatus={handleToggleStatus}
-                  onResetPassword={handleResetPassword}
-                  loadingId={loadingId}
-                />
-              ))}
             </div>
+          )}
 
-            {/* Footer */}
-            <div className="px-5 py-3 border-t border-sos-gray-100 bg-sos-gray-50 text-xs text-sos-gray-400">
-              {filtered.length} utilisateur{filtered.length !== 1 ? 's' : ''} affichés sur {users.length} total
+          {/* ──── AUDIT LOGS TAB ──── */}
+          {activeTab === 'audit' && (
+            <div className="bg-white border border-sos-gray-200 rounded-xl shadow-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-sos-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-sos-gray-500" />
+                  <span className="text-sm font-semibold text-sos-gray-700">Journal d'audit</span>
+                </div>
+                <span className="text-xs text-sos-gray-400">{auditTotal} entrée{auditTotal !== 1 ? 's' : ''}</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-sos-gray-50 text-sos-gray-500 text-xs uppercase tracking-wider">
+                      <th className="px-5 py-3 text-left font-semibold">Date</th>
+                      <th className="px-5 py-3 text-left font-semibold">Utilisateur</th>
+                      <th className="px-5 py-3 text-left font-semibold">Action</th>
+                      <th className="px-5 py-3 text-left font-semibold">Modèle</th>
+                      <th className="px-5 py-3 text-left font-semibold">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sos-gray-100">
+                    {auditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-12 text-sos-gray-400">
+                          Aucune entrée d'audit trouvée
+                        </td>
+                      </tr>
+                    )}
+                    {auditLogs.map((log) => (
+                      <tr key={log._id} className="hover:bg-sos-gray-50 transition">
+                        <td className="px-5 py-3 text-sos-gray-600 whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="text-sos-gray-700 font-medium">{log.user?.name || '—'}</span>
+                          {log.user?.email && (
+                            <span className="text-sos-gray-400 text-xs ml-1">({log.user.email})</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="px-2 py-0.5 rounded-full bg-sos-blue-light text-sos-blue text-xs font-semibold">
+                            {log.action || '—'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-sos-gray-500">{log.model || '—'}</td>
+                        <td className="px-5 py-3 text-sos-gray-400 text-xs font-mono">{log.ipAddress || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {auditPages > 1 && (
+                <div className="px-5 py-3 border-t border-sos-gray-100 bg-sos-gray-50 flex items-center justify-between">
+                  <button disabled={auditPage <= 1}
+                    onClick={() => { const p = auditPage - 1; setAuditPage(p); fetchAuditLogs(p); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-sos-gray-600 hover:bg-white transition disabled:opacity-40 cursor-pointer">
+                    <ChevronLeft className="w-4 h-4" /> Précédent
+                  </button>
+                  <span className="text-xs text-sos-gray-400">Page {auditPage} sur {auditPages}</span>
+                  <button disabled={auditPage >= auditPages}
+                    onClick={() => { const p = auditPage + 1; setAuditPage(p); fetchAuditLogs(p); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-sos-gray-600 hover:bg-white transition disabled:opacity-40 cursor-pointer">
+                    Suivant <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Create User Modal ── */}
-      <CreateUserModal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onSubmit={handleCreateUser}
-        villages={villages}
-        submitting={submitting}
+      {/* ── Modals ── */}
+      <CreateUserModal open={showCreate} onClose={() => setShowCreate(false)} onSubmit={handleCreateUser} villages={villages} submitting={submitting} />
+      <EditRoleModal open={!!editRoleUser} user={editRoleUser} onClose={() => setEditRoleUser(null)} onSubmit={handleUpdateRole} villages={villages} submitting={submitting} />
+      <TempRoleModal open={!!tempRoleUser} user={tempRoleUser} onClose={() => setTempRoleUser(null)} onSubmit={handleGrantTempRole} submitting={submitting} />
+      <ConfirmModal
+        open={!!deleteConfirm}
+        title="Supprimer l'utilisateur"
+        message={`Êtes-vous sûr de vouloir supprimer "${deleteConfirm?.name}" (${deleteConfirm?.email}) ? Cette action est irréversible.`}
+        onConfirm={handleDeleteUser}
+        onCancel={() => setDeleteConfirm(null)}
+        loading={deleteLoading}
+        danger
       />
+      </div>
     </div>
   );
 }

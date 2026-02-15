@@ -15,13 +15,14 @@ import {
   Flag
 } from 'lucide-react';
 import { getProfile } from '../services/api';
+import BackgroundPattern from './BackgroundPattern';
 
 const STATUS_CONFIG = {
-  EN_ATTENTE: { label: 'En attente', color: 'bg-sos-yellow text-sos-gray-900', icon: Clock },
+  EN_ATTENTE: { label: 'En attente', color: 'bg-sos-blue text-white', icon: Clock },
   EN_COURS: { label: 'En cours', color: 'bg-sos-blue text-white', icon: AlertCircle },
   CLOTURE: { label: 'Clôturé', color: 'bg-sos-green text-white', icon: CheckCircle },
-  FAUX_SIGNALEMENT: { label: 'Faux signalement', color: 'bg-sos-red text-white', icon: AlertCircle },
-  ARCHIVE: { label: 'Archivé', color: 'bg-sos-gray-300 text-sos-gray-700', icon: FileText },
+  FAUX_SIGNALEMENT: { label: 'Faux signalement', color: 'bg-sos-coral text-white', icon: AlertCircle },
+  ARCHIVE: { label: 'Archivé', color: 'bg-sos-gray-300 text-sos-navy', icon: FileText },
 };
 
 const INCIDENT_TYPE_LABELS = {
@@ -38,9 +39,9 @@ const INCIDENT_TYPE_LABELS = {
 
 const URGENCY_COLORS = {
   FAIBLE: 'border-l-sos-green',
-  MOYEN: 'border-l-sos-yellow',
-  ELEVE: 'border-l-orange-500',
-  CRITIQUE: 'border-l-sos-red',
+  MOYEN: 'border-l-sos-blue',
+  ELEVE: 'border-l-sos-blue',
+  CRITIQUE: 'border-l-sos-coral',
 };
 
 const URGENCY_LABELS = {
@@ -85,10 +86,11 @@ function ProfileLandingPage({ onCreateSignalement }) {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-sos-gray-600">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Chargement...</span>
+      <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden flex items-center justify-center">
+        <BackgroundPattern />
+        <div className="relative z-10 flex items-center gap-3 text-sos-navy">
+          <Loader2 className="w-6 h-6 animate-spin text-sos-blue" />
+          <span className="text-sos-gray-600">Chargement...</span>
         </div>
       </div>
     );
@@ -96,9 +98,10 @@ function ProfileLandingPage({ onCreateSignalement }) {
 
   if (error) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white shadow-card rounded-xl border border-sos-red/20 p-6 max-w-md">
-          <div className="flex items-center gap-3 text-sos-red mb-2">
+      <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden flex items-center justify-center p-4">
+        <BackgroundPattern />
+        <div className="relative z-10 bg-white/95 backdrop-blur-sm shadow-lg rounded-2xl border border-sos-coral/20 p-6 max-w-md">
+          <div className="flex items-center gap-3 text-sos-coral mb-2">
             <AlertCircle className="w-5 h-5" />
             <h3 className="font-semibold">Erreur</h3>
           </div>
@@ -109,14 +112,15 @@ function ProfileLandingPage({ onCreateSignalement }) {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden py-10 px-4 sm:px-6 lg:px-8">
+      <BackgroundPattern />
+      <div className="relative z-10 max-w-6xl mx-auto space-y-8">
         {/* Welcome Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-sos-gray-900">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-sos-navy">
             Bienvenue, {profile?.name}
           </h1>
-          <p className="mt-1 text-sm text-sos-gray-500">
+          <p className="mt-2 text-sm text-sos-gray-500">
             Tableau de bord — Niveau 1
           </p>
         </div>
@@ -124,13 +128,13 @@ function ProfileLandingPage({ onCreateSignalement }) {
         {/* Profile Card & Quick Action */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Profile Information */}
-          <div className="lg:col-span-2 bg-white shadow-card rounded-xl border border-sos-gray-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-sos-blue-light flex items-center justify-center">
+          <div className="lg:col-span-2 bg-sos-blue-lighter shadow-sm rounded-2xl border border-sos-blue/10 p-7">
+            <div className="flex items-center gap-3 mb-7">
+              <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm">
                 <User className="w-6 h-6 text-sos-blue" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-sos-gray-900">Mon Profil</h2>
+                <h2 className="text-lg font-bold text-sos-navy">Mon Profil</h2>
                 <p className="text-sm text-sos-gray-500">Informations personnelles</p>
               </div>
             </div>
@@ -138,14 +142,14 @@ function ProfileLandingPage({ onCreateSignalement }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Village/Programme */}
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-sos-green-light flex items-center justify-center shrink-0">
-                  <MapPin className="w-5 h-5 text-sos-green" />
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm">
+                  <MapPin className="w-5 h-5 text-sos-blue" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase tracking-wide">
                     Programme (Ville)
                   </p>
-                  <p className="text-sm font-semibold text-sos-gray-900 mt-1">
+                  <p className="text-sm font-bold text-sos-navy mt-1">
                     {profile?.village?.name || 'Non assigné'}
                   </p>
                   {profile?.village?.location && (
@@ -158,14 +162,14 @@ function ProfileLandingPage({ onCreateSignalement }) {
 
               {/* Children Count */}
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-sos-yellow-light flex items-center justify-center shrink-0">
-                  <Users className="w-5 h-5 text-sos-yellow" />
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Users className="w-5 h-5 text-sos-blue" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase tracking-wide">
                     Enfants en charge
                   </p>
-                  <p className="text-sm font-semibold text-sos-gray-900 mt-1">
+                  <p className="text-sm font-bold text-sos-navy mt-1">
                     {profile?.childrenCount || 0} enfant{profile?.childrenCount > 1 ? 's' : ''}
                   </p>
                 </div>
@@ -174,10 +178,10 @@ function ProfileLandingPage({ onCreateSignalement }) {
               {/* Role Details */}
               {profile?.roleDetails && (
                 <div className="sm:col-span-2">
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase tracking-wide">
                     Rôle
                   </p>
-                  <p className="text-sm font-semibold text-sos-gray-900 mt-1">
+                  <p className="text-sm font-bold text-sos-navy mt-1">
                     {profile.roleDetails.replace(/_/g, ' ')}
                   </p>
                 </div>
@@ -186,22 +190,24 @@ function ProfileLandingPage({ onCreateSignalement }) {
           </div>
 
           {/* Quick Action Card */}
-          <div className="bg-gradient-to-br from-sos-blue to-sos-blue-dark shadow-card rounded-xl border border-sos-blue/20 p-6 text-white">
+          <div className="bg-gradient-to-br from-sos-blue via-sos-blue to-sos-blue-dark shadow-lg rounded-2xl p-7 text-white">
             <div className="flex flex-col h-full">
               <div className="flex-1">
-                <FileText className="w-10 h-10 mb-4 opacity-90" />
-                <h3 className="text-lg font-semibold mb-2">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">
                   Créer un signalement
                 </h3>
-                <p className="text-sm opacity-90">
+                <p className="text-sm text-white/90 leading-relaxed">
                   Déclarez un nouvel incident ou préoccupation concernant un enfant.
                 </p>
               </div>
               <button
                 onClick={onCreateSignalement}
-                className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3 
-                           bg-white text-sos-blue rounded-xl font-semibold text-sm
-                           hover:bg-sos-gray-50 active:scale-[0.98] transition-all shadow-sm"
+                className="mt-6 w-full flex items-center justify-center gap-2 px-6 py-3.5 
+                           bg-white text-sos-blue rounded-xl font-bold text-sm
+                           hover:bg-white/95 hover:shadow-lg active:scale-[0.98] transition-all"
               >
                 <PlusCircle className="w-5 h-5" />
                 Nouveau Signalement
@@ -211,31 +217,33 @@ function ProfileLandingPage({ onCreateSignalement }) {
         </div>
 
         {/* Previous Signalements */}
-        <div className="bg-white shadow-card rounded-xl border border-sos-gray-200 p-6">
+        <div className="bg-sos-gray-50 shadow-sm rounded-2xl border border-sos-gray-100 p-7">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-lg font-semibold text-sos-gray-900">
+              <h2 className="text-xl font-bold text-sos-navy">
                 Mes Signalements
               </h2>
               <p className="text-sm text-sos-gray-500 mt-1">
                 Historique de vos déclarations
               </p>
             </div>
-            <span className="px-3 py-1 bg-sos-blue-light text-sos-blue rounded-full text-sm font-medium">
-              {signalements.length} total
+            <span className="px-3.5 py-1.5 bg-sos-blue-light text-sos-blue rounded-full text-sm font-bold">
+              {signalements.length}
             </span>
           </div>
 
           {signalements.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-12 h-12 mx-auto text-sos-gray-300 mb-3" />
-              <p className="text-sm text-sos-gray-500">
+            <div className="text-center py-16">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-sos-blue-lighter flex items-center justify-center">
+                <FileText className="w-8 h-8 text-sos-blue" />
+              </div>
+              <p className="text-sm text-sos-gray-600 mb-4">
                 Vous n'avez pas encore créé de signalement
               </p>
               <button
                 onClick={onCreateSignalement}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium
-                           text-sos-blue hover:text-sos-blue-dark transition"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold
+                           bg-sos-blue text-white rounded-xl hover:bg-sos-blue-dark transition-all"
               >
                 <PlusCircle className="w-4 h-4" />
                 Créer votre premier signalement
@@ -252,22 +260,22 @@ function ProfileLandingPage({ onCreateSignalement }) {
                   <div
                     key={sig._id}
                     onClick={() => setSelectedSignalement(sig)}
-                    className={`border-l-4 ${urgencyColor} bg-sos-gray-50 rounded-lg p-4 
-                               hover:shadow-md hover:bg-white transition-all cursor-pointer`}
+                    className={`border-l-4 ${urgencyColor} bg-white rounded-xl p-5 
+                               hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer border border-sos-gray-100`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-sm font-semibold text-sos-gray-900 truncate">
+                          <h3 className="text-sm font-bold text-sos-navy truncate">
                             {sig.title || 'Sans titre'}
                           </h3>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full 
-                                          text-xs font-medium ${statusInfo.color} shrink-0`}>
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full 
+                                          text-xs font-semibold ${statusInfo.color} shrink-0`}>
                             <StatusIcon className="w-3 h-3" />
                             {statusInfo.label}
                           </span>
                         </div>
-                        <p className="text-xs text-sos-gray-600 line-clamp-2 mb-2">
+                        <p className="text-xs text-sos-gray-600 line-clamp-2 mb-3 leading-relaxed">
                           {sig.description}
                         </p>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-sos-gray-500">
@@ -301,26 +309,26 @@ function ProfileLandingPage({ onCreateSignalement }) {
       {/* Modal for Signalement Details */}
       {selectedSignalement && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fade-in backdrop-blur-sm"
           onClick={() => setSelectedSignalement(null)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-sos-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+            <div className="sticky top-0 bg-gradient-to-r from-sos-blue-lighter to-white border-b border-sos-blue-light/30 px-6 py-5 flex items-center justify-between rounded-t-3xl">
               <div className="flex-1">
-                <h2 className="text-xl font-bold text-sos-gray-900">
+                <h2 className="text-xl font-bold text-sos-navy">
                   {selectedSignalement.title || 'Signalement sans titre'}
                 </h2>
-                <p className="text-sm text-sos-gray-500 mt-1">
+                <p className="text-sm text-sos-gray-600 mt-1">
                   Créé le {formatDate(selectedSignalement.createdAt)}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedSignalement(null)}
-                className="ml-4 p-2 rounded-lg hover:bg-sos-gray-100 transition-colors"
+                className="ml-4 p-2 rounded-xl hover:bg-white/80 transition-all"
               >
                 <X className="w-5 h-5 text-sos-gray-600" />
               </button>
@@ -330,18 +338,18 @@ function ProfileLandingPage({ onCreateSignalement }) {
             <div className="p-6 space-y-6">
               {/* Status & Urgency */}
               <div className="flex flex-wrap gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-sos-gray-600">Statut:</span>
-                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                <div className="flex items-center gap-2 bg-sos-blue-lighter px-4 py-2 rounded-xl">
+                  <span className="text-sm font-semibold text-sos-navy">Statut:</span>
+                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
                     (STATUS_CONFIG[selectedSignalement.status] || STATUS_CONFIG.EN_ATTENTE).color
                   }`}>
                     {(STATUS_CONFIG[selectedSignalement.status] || STATUS_CONFIG.EN_ATTENTE).label}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Flag className="w-4 h-4 text-sos-gray-500" />
-                  <span className="text-sm font-medium text-sos-gray-600">Urgence:</span>
-                  <span className="text-sm font-semibold text-sos-gray-900">
+                <div className="flex items-center gap-2 bg-sos-blue-lighter px-4 py-2 rounded-xl">
+                  <Flag className="w-4 h-4 text-sos-blue" />
+                  <span className="text-sm font-semibold text-sos-navy">Urgence:</span>
+                  <span className="text-sm font-bold text-sos-navy">
                     {URGENCY_LABELS[selectedSignalement.urgencyLevel] || selectedSignalement.urgencyLevel}
                   </span>
                 </div>
@@ -350,22 +358,26 @@ function ProfileLandingPage({ onCreateSignalement }) {
               {/* Village & Program */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {selectedSignalement.village && (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="w-5 h-5 text-sos-blue shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 bg-white border border-sos-blue-light/30 rounded-xl p-4">
+                    <div className="w-10 h-10 rounded-xl bg-sos-blue-lighter flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5 text-sos-blue" />
+                    </div>
                     <div>
-                      <p className="text-xs font-medium text-sos-gray-500 uppercase">Village</p>
-                      <p className="text-sm font-semibold text-sos-gray-900 mt-0.5">
+                      <p className="text-xs font-semibold text-sos-gray-500 uppercase">Village</p>
+                      <p className="text-sm font-bold text-sos-navy mt-1">
                         {selectedSignalement.village.name}
                       </p>
                     </div>
                   </div>
                 )}
                 {selectedSignalement.program && (
-                  <div className="flex items-start gap-3">
-                    <Tag className="w-5 h-5 text-sos-green shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 bg-white border border-sos-blue-light/30 rounded-xl p-4">
+                    <div className="w-10 h-10 rounded-xl bg-sos-blue-lighter flex items-center justify-center shrink-0">
+                      <Tag className="w-5 h-5 text-sos-blue" />
+                    </div>
                     <div>
-                      <p className="text-xs font-medium text-sos-gray-500 uppercase">Programme</p>
-                      <p className="text-sm font-semibold text-sos-gray-900 mt-0.5">
+                      <p className="text-xs font-semibold text-sos-gray-500 uppercase">Programme</p>
+                      <p className="text-sm font-bold text-sos-navy mt-1">
                         {selectedSignalement.program}
                       </p>
                     </div>
@@ -376,10 +388,10 @@ function ProfileLandingPage({ onCreateSignalement }) {
               {/* Incident Type */}
               {selectedSignalement.incidentType && (
                 <div>
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase mb-2">Type d'incident</p>
-                  <div className="inline-flex items-center gap-2 px-3 py-2 bg-sos-blue-light rounded-lg">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-3">Type d'incident</p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-sos-blue-lighter border border-sos-blue-light/40 rounded-xl">
                     <AlertCircle className="w-4 h-4 text-sos-blue" />
-                    <span className="text-sm font-medium text-sos-blue">
+                    <span className="text-sm font-semibold text-sos-navy">
                       {INCIDENT_TYPE_LABELS[selectedSignalement.incidentType] || selectedSignalement.incidentType}
                     </span>
                   </div>
@@ -388,9 +400,9 @@ function ProfileLandingPage({ onCreateSignalement }) {
 
               {/* Description */}
               <div>
-                <p className="text-xs font-medium text-sos-gray-500 uppercase mb-2">Description</p>
-                <div className="bg-sos-gray-50 rounded-lg p-4 border border-sos-gray-200">
-                  <p className="text-sm text-sos-gray-700 leading-relaxed whitespace-pre-wrap">
+                <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-3">Description</p>
+                <div className="bg-sos-blue-lighter/50 rounded-xl p-4 border border-sos-blue-light/30">
+                  <p className="text-sm text-sos-navy leading-relaxed whitespace-pre-wrap">
                     {selectedSignalement.description}
                   </p>
                 </div>
@@ -399,8 +411,8 @@ function ProfileLandingPage({ onCreateSignalement }) {
               {/* Child Name (if not anonymous) */}
               {selectedSignalement.childName && !selectedSignalement.isAnonymous && (
                 <div>
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase mb-2">Nom de l'enfant</p>
-                  <p className="text-sm font-semibold text-sos-gray-900">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-2">Nom de l'enfant</p>
+                  <p className="text-sm font-bold text-sos-navy">
                     {selectedSignalement.childName}
                   </p>
                 </div>
@@ -409,8 +421,8 @@ function ProfileLandingPage({ onCreateSignalement }) {
               {/* Abuser Name (if not anonymous) */}
               {selectedSignalement.abuserName && !selectedSignalement.isAnonymous && (
                 <div>
-                  <p className="text-xs font-medium text-sos-gray-500 uppercase mb-2">Agresseur présumé</p>
-                  <p className="text-sm font-semibold text-sos-gray-900">
+                  <p className="text-xs font-semibold text-sos-gray-500 uppercase mb-2">Agresseur présumé</p>
+                  <p className="text-sm font-bold text-sos-navy">
                     {selectedSignalement.abuserName}
                   </p>
                 </div>
@@ -418,9 +430,9 @@ function ProfileLandingPage({ onCreateSignalement }) {
 
               {/* Anonymous Badge */}
               {selectedSignalement.isAnonymous && (
-                <div className="flex items-center gap-2 px-4 py-3 bg-sos-yellow-light border border-sos-yellow/20 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-sos-yellow" />
-                  <span className="text-sm font-medium text-sos-gray-700">
+                <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800">
                     Signalement anonyme - Identités protégées
                   </span>
                 </div>
@@ -428,11 +440,11 @@ function ProfileLandingPage({ onCreateSignalement }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-sos-gray-50 border-t border-sos-gray-200 px-6 py-4 rounded-b-2xl">
+            <div className="sticky bottom-0 bg-gradient-to-r from-sos-blue-lighter to-white border-t border-sos-blue-light/30 px-6 py-4 rounded-b-3xl">
               <button
                 onClick={() => setSelectedSignalement(null)}
-                className="w-full px-4 py-2.5 bg-sos-blue text-white rounded-lg font-medium 
-                         hover:bg-sos-blue-dark transition-colors"
+                className="w-full px-4 py-3 bg-sos-blue text-white rounded-xl font-semibold 
+                         hover:bg-sos-blue-dark hover:shadow-lg transition-all"
               >
                 Fermer
               </button>

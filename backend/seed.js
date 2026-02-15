@@ -107,6 +107,16 @@ const seedDatabase = async () => {
     });
     users.push(user5);
 
+    const user6 = await User.create({
+      name: 'Super Admin',
+      email: 'superadmin@sos.tn',
+      password: 'superadmin123',
+      role: 'LEVEL4',
+      roleDetails: 'SUPER_ADMIN',
+      accessibleVillages: villages.map(v => v._id)
+    });
+    users.push(user6);
+
     console.log(`✓ Created ${users.length} users`);
 
     // Update village directors
@@ -135,6 +145,9 @@ const seedDatabase = async () => {
     console.log('  Email: ahmed@sos.tn');
     console.log('  Password: ahmed123');
     console.log('  Village: Siliana\n');
+    console.log('LEVEL 4 (Super Admin):');
+    console.log('  Email: superadmin@sos.tn');
+    console.log('  Password: superadmin123\n');
 
     process.exit(0);
   } catch (error) {
