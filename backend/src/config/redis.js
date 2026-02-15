@@ -8,6 +8,10 @@ const redisConfig = {
   port: parseInt(process.env.REDIS_PORT || '6379', 10),
   password: process.env.REDIS_PASSWORD || undefined,
   retryStrategy: (times) => {
+    if (times > 3) {
+      console.log('⚠️ Redis unavailable — running without cache.');
+      return null; // stop retrying
+    }
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
