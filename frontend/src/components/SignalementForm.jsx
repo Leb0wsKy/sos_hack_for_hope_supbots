@@ -14,6 +14,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { createSignalement, getVillages } from '../services/api';
+import BackgroundPattern from './BackgroundPattern';
 
 /* ── Constant maps ── */
 const INCIDENT_TYPES = [
@@ -30,9 +31,9 @@ const INCIDENT_TYPES = [
 
 const URGENCY_LEVELS = [
   { value: 'FAIBLE', label: 'Faible', color: 'bg-sos-green text-white', ring: 'ring-sos-green/30' },
-  { value: 'MOYEN', label: 'Moyen', color: 'bg-sos-yellow text-sos-gray-900', ring: 'ring-sos-yellow/30' },
-  { value: 'ELEVE', label: 'Élevé', color: 'bg-orange-500 text-white', ring: 'ring-orange-500/30' },
-  { value: 'CRITIQUE', label: 'Critique', color: 'bg-sos-red text-white', ring: 'ring-sos-red/30' },
+  { value: 'MOYEN', label: 'Moyen', color: 'bg-amber-400 text-white', ring: 'ring-amber-400/30' },
+  { value: 'ELEVE', label: 'Élevé', color: 'bg-sos-blue text-white', ring: 'ring-sos-blue/30' },
+  { value: 'CRITIQUE', label: 'Critique', color: 'bg-sos-coral text-white', ring: 'ring-sos-coral/30' },
 ];
 
 const FILE_ICONS = {
@@ -174,13 +175,14 @@ function SignalementForm({ onBack, onSuccess }) {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden py-8 px-4 sm:px-6 lg:px-8">
+      <BackgroundPattern />
+      <div className="relative z-10 max-w-3xl mx-auto">
         {/* Back button */}
         {onBack && (
           <button
             onClick={onBack}
-            className="mb-4 flex items-center gap-2 text-sm text-sos-gray-600 hover:text-sos-blue transition"
+            className="mb-6 flex items-center gap-2 text-sm font-semibold text-sos-navy hover:text-sos-blue transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour
@@ -189,10 +191,10 @@ function SignalementForm({ onBack, onSuccess }) {
 
         {/* Page header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-sos-gray-900">
+          <h1 className="text-3xl font-bold text-sos-navy">
             Nouveau Signalement
           </h1>
-          <p className="mt-1 text-sm text-sos-gray-500">
+          <p className="mt-2 text-sm text-sos-gray-600">
             Remplissez ce formulaire pour déclarer un incident. Les champs marqués * sont obligatoires.
           </p>
         </div>
@@ -207,9 +209,9 @@ function SignalementForm({ onBack, onSuccess }) {
 
         {/* ── Error banner ── */}
         {error && (
-          <div className="mb-6 flex items-center gap-3 bg-sos-red-light border border-sos-red/20 text-sos-red px-5 py-3 rounded-xl animate-fade-in">
+          <div className="mb-6 flex items-center gap-3 bg-red-50 border border-sos-coral text-sos-coral px-5 py-4 rounded-xl animate-fade-in">
             <AlertTriangle className="w-5 h-5 shrink-0" />
-            <span className="text-sm font-medium">{error}</span>
+            <span className="text-sm font-semibold">{error}</span>
           </div>
         )}
 
@@ -219,16 +221,17 @@ function SignalementForm({ onBack, onSuccess }) {
         ═══════════════════════════════════════════ */}
         <form
           onSubmit={handleSubmit}
-          className="bg-white shadow-card rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-[2.5rem]
-                     border border-sos-gray-200 p-6 sm:p-8 space-y-8"
+          className="bg-white shadow-lg rounded-3xl border border-sos-gray-100 p-6 sm:p-8 space-y-8"
         >
           {/* ── Section: Anonymous toggle ── */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-sos-blue-light/60 border border-sos-blue/10">
+          <div className="flex items-center justify-between p-5 rounded-xl bg-sos-blue-lighter border border-sos-blue-light/40">
             <div className="flex items-center gap-3">
-              <UserX className="w-5 h-5 text-sos-blue" />
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center">
+                <UserX className="w-5 h-5 text-sos-blue" />
+              </div>
               <div>
-                <p className="text-sm font-semibold text-sos-gray-800">Signalement anonyme</p>
-                <p className="text-xs text-sos-gray-500">
+                <p className="text-sm font-bold text-sos-navy">Signalement anonyme</p>
+                <p className="text-xs text-sos-gray-600">
                   Les noms ne seront pas enregistrés
                 </p>
               </div>
@@ -250,7 +253,7 @@ function SignalementForm({ onBack, onSuccess }) {
 
           {/* ── Section: Location ── */}
           <fieldset className="space-y-4">
-            <legend className="text-sm font-bold text-sos-gray-700 uppercase tracking-wide mb-2">
+            <legend className="text-sm font-bold text-sos-navy uppercase tracking-wide mb-3">
               Localisation
             </legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

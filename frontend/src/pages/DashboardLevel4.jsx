@@ -34,6 +34,7 @@ import {
   getVillages,
   getAnalytics,
 } from '../services/api';
+import BackgroundPattern from '../components/BackgroundPattern';
 
 /* ═══════════════════════════════════════════════════════
    Constants
@@ -42,7 +43,7 @@ import {
 const ROLE_CONFIG = {
   LEVEL1: { label: 'Niveau 1 — Déclarant', color: 'bg-sos-blue-light text-sos-blue', short: 'L1' },
   LEVEL2: { label: 'Niveau 2 — Analyste', color: 'bg-sos-green-light text-sos-green', short: 'L2' },
-  LEVEL3: { label: 'Niveau 3 — Gouvernance', color: 'bg-sos-yellow-light text-yellow-700', short: 'L3' },
+  LEVEL3: { label: 'Niveau 3 — Gouvernance', color: 'bg-sos-blue-lighter text-sos-blue', short: 'L3' },
   LEVEL4: { label: 'Niveau 4 — Super Admin', color: 'bg-sos-red-light text-sos-red', short: 'L4' },
 };
 
@@ -574,7 +575,9 @@ function DashboardLevel4() {
   const ov = analytics?.overview || {};
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-sos-gray-50 pb-12">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-br from-sos-blue-lighter via-white to-sos-coral-light overflow-hidden pb-12">
+      <BackgroundPattern />
+      <div className="relative z-10">
       {/* ── Toast ── */}
       {toast && (
         <div className={`fixed top-20 right-6 z-[60] flex items-center gap-2 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in ${
@@ -630,7 +633,7 @@ function DashboardLevel4() {
             <StatCard label="Inactifs" value={inactiveCount} icon={XCircle} color="text-sos-red" bgLight="bg-sos-red-light" />
             <StatCard label="Villages" value={villages.length} icon={Building2} color="text-sos-brown" bgLight="bg-sos-brown-light" />
             <StatCard label="Signalements" value={ov.total ?? '—'} icon={BarChart3} color="text-sos-blue" bgLight="bg-sos-blue-light" />
-            <StatCard label="En attente" value={ov.enAttente ?? '—'} icon={Clock} color="text-yellow-700" bgLight="bg-sos-yellow-light" />
+            <StatCard label="En attente" value={ov.enAttente ?? '—'} icon={Clock} color="text-sos-blue" bgLight="bg-sos-blue-lighter" />
           </div>
 
           {/* ═══ Row 2: Role breakdown pills ═══ */}
@@ -723,6 +726,7 @@ function DashboardLevel4() {
         villages={villages}
         submitting={submitting}
       />
+      </div>
     </div>
   );
 }
