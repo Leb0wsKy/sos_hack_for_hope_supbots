@@ -23,7 +23,10 @@ import {
   ChevronRight,
   PenTool,
   Send,
+  FileCheck,
+  Stamp,
 } from 'lucide-react';
+import { Toast, useToast } from '../components/Toast';
 import {
   getAnalytics,
   getVillageRatings,
@@ -32,6 +35,7 @@ import {
   archiveSignalement,
   exportData,
   downloadAttachment,
+  downloadWorkflowAttachment,
 } from '../services/api';
 
 /* ═══════════════════════════════════════════════════════
@@ -47,6 +51,15 @@ const INCIDENT_LABELS = {
   EDUCATION: 'Éducation',
   FAMILIAL: 'Familial',
   AUTRE: 'Autre',
+};
+
+const STAGE_LABELS = {
+  ficheInitiale: 'Fiche Initiale',
+  rapportDpe: 'Rapport DPE',
+  evaluationComplete: 'Évaluation Complète',
+  planAction: 'Plan d\'Action',
+  rapportSuivi: 'Rapport de Suivi',
+  rapportFinal: 'Rapport Final',
 };
 
 const URGENCY_COLOR = { FAIBLE: 'bg-sos-green', MOYEN: 'bg-sos-yellow', ELEVE: 'bg-orange-500', CRITIQUE: 'bg-sos-red' };
@@ -216,6 +229,7 @@ const SignalementCard = ({ item, onClick }) => {
 const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [actionLoading, setActionLoading] = useState('');
   const [previewFile, setPreviewFile] = useState(null);
+  const [toast, showToast, dismissToast] = useToast();
   if (!item) return null;
 
   const urg = URGENCY_BADGES[item.urgencyLevel] || URGENCY_BADGES.FAIBLE;
@@ -225,16 +239,16 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     const reason = prompt('Raison de la clôture :');
     if (!reason) return;
     setActionLoading('close');
-    try { await closeSignalement(item._id, reason); alert('✅ Signalement clôturé.'); onRefresh(); }
-    catch (err) { alert(err.response?.data?.message || 'Erreur.'); }
+    try { await closeSignalement(item._id, reason); showToast('success', 'Signalement clôturé.'); onRefresh(); }
+    catch (err) { showToast('error', err.response?.data?.message || 'Erreur lors de la clôture.'); }
     setActionLoading('');
   };
 
   const handleArchive = async () => {
     if (!confirm('Archiver ce signalement ?')) return;
     setActionLoading('archive');
-    try { await archiveSignalement(item._id); alert('✅ Archivé.'); onRefresh(); }
-    catch (err) { alert(err.response?.data?.message || 'Erreur.'); }
+    try { await archiveSignalement(item._id); showToast('success', 'Signalement archivé.'); onRefresh(); }
+    catch (err) { showToast('error', err.response?.data?.message || 'Erreur lors de l\'archivage.'); }
     setActionLoading('');
   };
 
@@ -281,8 +295,40 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             </div>
           )}
 
-          {/* Director Signature Section */}
-          {item.directorSignature?.signedAt && (
+          {/* Director Signatures Section (both Fiche Initiale + Rapport DPE) */}
+          {(item.directorSignatures?.ficheInitiale?.signedAt || item.directorSignatures?.rapportDpe?.signedAt) && (
+            <div className="space-y-3">
+              {['ficheInitiale', 'rapportDpe'].map(docKey => {
+                const sig = item.directorSignatures?.[docKey];
+                if (!sig?.signedAt) return null;
+                const label = docKey === 'ficheInitiale' ? 'Fiche Initiale' : 'Rapport DPE';
+                return (
+                  <div key={docKey} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <PenTool className="w-4 h-4 text-sos-blue" />
+                      <p className="text-xs font-bold text-sos-blue uppercase tracking-wide">Signature — {label}</p>
+                    </div>
+                    <p className="text-sm font-medium text-sos-gray-800">{sig.signedBy?.name || 'Directeur'}</p>
+                    {sig.signatureType === 'STAMP' && sig.signatureData && (
+                      <div className="bg-white border border-blue-100 rounded-lg p-3">
+                        <p className="text-xs text-sos-gray-600 italic whitespace-pre-line">{sig.signatureData}</p>
+                      </div>
+                    )}
+                    {sig.signatureType === 'IMAGE' && sig.signatureData && (
+                      <div className="bg-white border border-blue-100 rounded-lg p-3 flex justify-center">
+                        <img src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/${sig.signatureData}`}
+                             alt="Signature" className="max-h-24 object-contain" />
+                      </div>
+                    )}
+                    <p className="text-[10px] text-sos-gray-400">Signé le {fmtDate(sig.signedAt)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Legacy single signature fallback */}
+          {!item.directorSignatures?.ficheInitiale?.signedAt && !item.directorSignatures?.rapportDpe?.signedAt && item.directorSignature?.signedAt && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <PenTool className="w-4 h-4 text-sos-blue" />
@@ -314,9 +360,77 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             </div>
           )}
 
+          {/* ── Workflow Stage Documents ── */}
+          {(() => {
+            const wf = item.workflowRef || item.workflow;
+            const stages = wf?.stages || {};
+            const hasStageFiles = Object.values(stages).some(s => s?.completed || s?.attachments?.length > 0);
+
+            return hasStageFiles ? (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide">Documents du dossier</p>
+                {Object.entries(stages).map(([stageKey, stageData]) => {
+                  if (!stageData?.completed && !stageData?.attachments?.length) return null;
+                  const label = STAGE_LABELS[stageKey] || stageKey;
+                  return (
+                    <div key={stageKey} className="bg-sos-gray-50 rounded-xl p-3 border border-sos-gray-200 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-sos-blue" />
+                        <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide">{label}</p>
+                        {stageData?.completed && (
+                          <span className="text-[10px] text-sos-green font-medium ml-auto">✓ Complété</span>
+                        )}
+                      </div>
+                      {stageData?.attachments?.length > 0 && (
+                        <div className="space-y-1.5">
+                          {stageData.attachments.map((a, i) => {
+                            const mime = a.mimeType || '';
+                            const canPreview = mime.startsWith('image/') || mime === 'application/pdf';
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-sm bg-white rounded-lg px-3 py-2 border border-sos-gray-200">
+                                <FileText className="w-4 h-4 text-sos-blue shrink-0" />
+                                <span className="truncate flex-1 text-sos-gray-700">{a.originalName || a.filename}</span>
+                                {canPreview && (
+                                  <button title="Aperçu" onClick={async () => {
+                                    try {
+                                      const { data } = wf?._id
+                                        ? await downloadWorkflowAttachment(wf._id, stageKey, a.filename)
+                                        : await downloadAttachment(item._id, a.filename);
+                                      setPreviewFile({ url: URL.createObjectURL(new Blob([data], { type: mime })), name: a.originalName || a.filename, type: mime });
+                                    } catch { showToast('error', 'Erreur lors de l\'aperçu.'); }
+                                  }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
+                                    <Eye className="w-4 h-4 text-sos-blue" />
+                                  </button>
+                                )}
+                                <button title="Télécharger" onClick={async () => {
+                                  try {
+                                    const { data } = wf?._id
+                                      ? await downloadWorkflowAttachment(wf._id, stageKey, a.filename)
+                                      : await downloadAttachment(item._id, a.filename);
+                                    const url = URL.createObjectURL(new Blob([data]));
+                                    const link = document.createElement('a'); link.href = url;
+                                    link.setAttribute('download', a.originalName || a.filename);
+                                    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+                                  } catch { showToast('error', 'Erreur lors du téléchargement.'); }
+                                }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
+                                  <Download className="w-4 h-4 text-sos-blue" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null;
+          })()}
+
+          {/* Original L1 attachments (fallback when no workflow stages) */}
           {item.attachments?.length > 0 && (
             <div>
-              <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-2">Pièces jointes</p>
+              <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-2">Pièces jointes originales</p>
               <div className="space-y-1.5">
                 {item.attachments.map((a, i) => {
                   const mime = a.mimeType || '';
@@ -330,7 +444,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                           try {
                             const { data } = await downloadAttachment(item._id, a.filename);
                             setPreviewFile({ url: URL.createObjectURL(new Blob([data], { type: mime })), name: a.originalName || a.filename, type: mime });
-                          } catch { alert('Erreur.'); }
+                          } catch { showToast('error', 'Erreur lors de l\'aperçu.'); }
                         }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
                           <Eye className="w-4 h-4 text-sos-blue" />
                         </button>
@@ -342,7 +456,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                           const link = document.createElement('a'); link.href = url;
                           link.setAttribute('download', a.originalName || a.filename);
                           document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-                        } catch { alert('Erreur.'); }
+                        } catch { showToast('error', 'Erreur lors du téléchargement.'); }
                       }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
                         <Download className="w-4 h-4 text-sos-blue" />
                       </button>
@@ -398,6 +512,9 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
           </div>
         </div>
       )}
+
+      {/* Toast notification */}
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   );
 };

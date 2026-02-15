@@ -21,12 +21,14 @@ import {
   Stamp,
   FileCheck,
 } from 'lucide-react';
+import { Toast, useToast } from '../components/Toast';
 import {
   getAnalytics,
   getSignalements,
   archiveSignalement,
   exportData,
   downloadAttachment,
+  downloadWorkflowAttachment,
   directorSignDossier,
   directorForwardDossier,
   getDPEDraft,
@@ -104,9 +106,11 @@ const HorizontalBar = ({ value, max, color = 'bg-sos-blue' }) => {
 const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [actionLoading, setActionLoading] = useState('');
   const [previewFile, setPreviewFile] = useState(null);
+  const [signTarget, setSignTarget] = useState(null); // null | 'FICHE_INITIALE' | 'RAPPORT_DPE'
   const [signMode, setSignMode] = useState(null); // null | 'STAMP' | 'IMAGE'
   const [sigImage, setSigImage] = useState(null);
   const [dpeContent, setDpeContent] = useState(null);
+  const [toast, showToast, dismissToast] = useToast();
 
   if (!item) return null;
 
@@ -115,20 +119,39 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const ds = DIRECTOR_STATUS[item.directorReviewStatus] || null;
 
   const hasDpeFinal = !!item.reports?.dpeFinal?.metadata?.submittedAt;
-  const canSign = item.directorReviewStatus === 'PENDING';
-  const canForward = item.directorReviewStatus === 'SIGNED';
+  const wf = item.workflowRef || item.workflow;
+  const stages = wf?.stages || {};
+
+  // Signature state
+  const ficheSigned = !!item.directorSignatures?.ficheInitiale?.signedAt;
+  const dpeSigned = !!item.directorSignatures?.rapportDpe?.signedAt;
+  const bothSigned = ficheSigned && dpeSigned;
+  const canSign = ['PENDING', 'PARTIALLY_SIGNED'].includes(item.directorReviewStatus);
+  const canForward = bothSigned && item.directorReviewStatus === 'SIGNED';
+
+  const STAGE_LABELS = {
+    ficheInitiale: 'Fiche Initiale',
+    rapportDpe: 'Rapport DPE',
+    evaluationComplete: 'Évaluation Complète',
+    planAction: 'Plan d\'Action',
+    rapportSuivi: 'Rapport de Suivi',
+    rapportFinal: 'Rapport Final',
+  };
 
   /* ── Actions ── */
   const handleSign = async (type) => {
+    if (!signTarget) return;
     setActionLoading('sign');
     try {
-      await directorSignDossier(item._id, type, type === 'IMAGE' ? sigImage : null);
-      alert('✅ Dossier signé avec succès.');
+      await directorSignDossier(item._id, type, signTarget, type === 'IMAGE' ? sigImage : null);
+      const label = signTarget === 'FICHE_INITIALE' ? 'Fiche Initiale' : 'Rapport DPE';
+      showToast('success', `${label} signé avec succès.`);
       setSignMode(null);
+      setSignTarget(null);
       setSigImage(null);
       onRefresh();
     } catch (err) {
-      alert(err.response?.data?.message || 'Erreur lors de la signature.');
+      showToast('error', err.response?.data?.message || 'Erreur lors de la signature.');
     }
     setActionLoading('');
   };
@@ -138,10 +161,10 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     setActionLoading('forward');
     try {
       await directorForwardDossier(item._id);
-      alert('✅ Dossier envoyé au Responsable National.');
+      showToast('success', 'Dossier envoyé au Responsable National.');
       onRefresh();
     } catch (err) {
-      alert(err.response?.data?.message || "Erreur lors de l'envoi.");
+      showToast('error', err.response?.data?.message || "Erreur lors de l'envoi.");
     }
     setActionLoading('');
   };
@@ -151,10 +174,10 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     setActionLoading('archive');
     try {
       await archiveSignalement(item._id);
-      alert('✅ Signalement archivé.');
+      showToast('success', 'Signalement archivé.');
       onRefresh();
     } catch (err) {
-      alert(err.response?.data?.message || "Erreur lors de l'archivage.");
+      showToast('error', err.response?.data?.message || "Erreur lors de l'archivage.");
     }
     setActionLoading('');
   };
@@ -217,14 +240,213 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             {item.classification && <div><p className="text-sos-gray-400 text-xs mb-0.5">Classification</p><p className="font-medium text-sos-gray-800">{item.classification}</p></div>}
           </div>
 
-          {/* ── Documents section ── */}
-          <div className="bg-sos-gray-50 rounded-xl p-4 space-y-3">
+          {/* ── ALL Documents from Workflow ── */}
+          <div className="space-y-4">
             <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide">Documents du dossier</p>
 
-            {/* Fiche initiale = attachments */}
-            {item.attachments?.length > 0 && (
-              <div>
-                <p className="text-xs text-sos-gray-500 mb-1.5">Pièces jointes / Fiche initiale</p>
+            {/* Workflow stage files */}
+            {Object.entries(stages).map(([stageKey, stageData]) => {
+              if (!stageData?.completed && !stageData?.attachments?.length) return null;
+              const label = STAGE_LABELS[stageKey] || stageKey;
+              const isFiche = stageKey === 'ficheInitiale';
+              const isDpe = stageKey === 'rapportDpe';
+              const signed = isFiche ? ficheSigned : isDpe ? dpeSigned : false;
+              const signable = isFiche || isDpe;
+
+              return (
+                <div key={stageKey} className={`rounded-xl p-4 space-y-2 border ${
+                  signable ? (signed ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200') : 'bg-sos-gray-50 border-sos-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className={`w-4 h-4 ${signed ? 'text-sos-green' : signable ? 'text-amber-600' : 'text-sos-blue'}`} />
+                      <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide">{label}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {stageData?.completed && (
+                        <span className="text-[10px] text-sos-green font-medium">✓ Complété {stageData.completedAt ? fmtDate(stageData.completedAt) : ''}</span>
+                      )}
+                      {signed && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sos-green-light text-sos-green">
+                          <PenTool className="w-3 h-3" /> Signé
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage attachments */}
+                  {stageData?.attachments?.length > 0 && (
+                    <div className="space-y-1.5">
+                      {stageData.attachments.map((a, i) => {
+                        const mime = a.mimeType || '';
+                        const canPreview = mime.startsWith('image/') || mime === 'application/pdf';
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-sm bg-white rounded-lg px-3 py-2 border border-sos-gray-200">
+                            <FileText className="w-4 h-4 text-sos-blue shrink-0" />
+                            <span className="truncate flex-1 text-sos-gray-700">{a.originalName || a.filename}</span>
+                            {canPreview && (
+                              <button title="Aperçu" onClick={async () => {
+                                try {
+                                  const { data } = wf?._id
+                                    ? await downloadWorkflowAttachment(wf._id, stageKey, a.filename)
+                                    : await downloadAttachment(item._id, a.filename);
+                                  const blob = new Blob([data], { type: mime });
+                                  setPreviewFile({ url: URL.createObjectURL(blob), name: a.originalName || a.filename, type: mime });
+                                } catch { showToast('error', 'Erreur lors de l\'aperçu.'); }
+                              }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
+                                <Eye className="w-4 h-4 text-sos-blue" />
+                              </button>
+                            )}
+                            <button title="Télécharger" onClick={async () => {
+                              try {
+                                const { data } = wf?._id
+                                  ? await downloadWorkflowAttachment(wf._id, stageKey, a.filename)
+                                  : await downloadAttachment(item._id, a.filename);
+                                const url = URL.createObjectURL(new Blob([data]));
+                                const link = document.createElement('a'); link.href = url;
+                                link.setAttribute('download', a.originalName || a.filename);
+                                document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+                              } catch { showToast('error', 'Erreur lors du téléchargement.'); }
+                            }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
+                              <Download className="w-4 h-4 text-sos-blue" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* DPE Report content viewer */}
+                  {isDpe && hasDpeFinal && (
+                    <div className="mt-1">
+                      <button onClick={loadDpe}
+                        className="flex items-center gap-2 text-sm bg-white rounded-lg px-3 py-2 border border-sos-gray-200
+                                   hover:bg-sos-blue-light transition cursor-pointer w-full">
+                        <FileCheck className="w-4 h-4 text-sos-green shrink-0" />
+                        <span className="text-sos-gray-700">Voir le rapport DPE Final</span>
+                        <Eye className="w-4 h-4 text-sos-blue ml-auto" />
+                      </button>
+                      {dpeContent && (
+                        <div className="mt-2 bg-white border border-sos-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto text-xs text-sos-gray-700 space-y-2">
+                          {dpeContent.titre && <p className="font-bold text-sm">{dpeContent.titre}</p>}
+                          {dpeContent.resume_signalement && <p><span className="font-semibold">Résumé :</span> {dpeContent.resume_signalement}</p>}
+                          {dpeContent.observations && <p><span className="font-semibold">Observations :</span> {dpeContent.observations}</p>}
+                          {dpeContent.evaluation_risque?.niveau && (
+                            <p><span className="font-semibold">Risque :</span> {dpeContent.evaluation_risque.niveau} — {dpeContent.evaluation_risque.justification}</p>
+                          )}
+                          {dpeContent.recommandations?.length > 0 && (
+                            <div><span className="font-semibold">Recommandations :</span>
+                              <ul className="list-disc ml-4 mt-1">{dpeContent.recommandations.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Signature display for signed docs */}
+                  {signable && signed && (() => {
+                    const sig = isFiche ? item.directorSignatures?.ficheInitiale : item.directorSignatures?.rapportDpe;
+                    return (
+                      <div className="border-t border-green-200 pt-2 mt-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <PenTool className="w-3.5 h-3.5 text-sos-green" />
+                          <p className="text-[10px] font-bold text-sos-green uppercase">Signature électronique</p>
+                        </div>
+                        {sig?.signatureType === 'STAMP' ? (
+                          <div className="bg-white border border-dashed border-sos-green rounded-lg p-2 text-center">
+                            <p className="text-xs font-mono text-sos-gray-700 whitespace-pre-line">{sig.signatureData}</p>
+                          </div>
+                        ) : (
+                          <div className="bg-white border border-sos-gray-200 rounded-lg p-2 flex justify-center">
+                            <img src={`http://localhost:5000/uploads/${sig?.signatureData}`} alt="Signature" className="max-h-16 object-contain"
+                              onError={(e) => { e.target.style.display = 'none'; }} />
+                          </div>
+                        )}
+                        <p className="text-[10px] text-sos-gray-400 mt-1">
+                          Signé le {fmtDate(sig?.signedAt)} par {sig?.signedBy?.name || 'Directeur'}
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Sign button for unsigned signable docs */}
+                  {signable && !signed && canSign && (
+                    <div className="pt-2">
+                      {signTarget !== (isFiche ? 'FICHE_INITIALE' : 'RAPPORT_DPE') ? (
+                        <button onClick={() => { setSignTarget(isFiche ? 'FICHE_INITIALE' : 'RAPPORT_DPE'); setSignMode(null); setSigImage(null); }}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                                     bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition cursor-pointer">
+                          <PenTool className="w-4 h-4" /> Signer {label}
+                        </button>
+                      ) : (
+                        <div className="bg-amber-100 rounded-xl p-3 space-y-2">
+                          <p className="text-xs font-bold text-amber-800">Choisir le mode de signature</p>
+                          {!signMode && (
+                            <div className="flex gap-2">
+                              <button onClick={() => setSignMode('STAMP')}
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                                           bg-sos-blue text-white text-xs font-semibold hover:bg-sos-blue-dark transition cursor-pointer">
+                                <Stamp className="w-3.5 h-3.5" /> Tampon
+                              </button>
+                              <button onClick={() => setSignMode('IMAGE')}
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                                           bg-white border border-sos-gray-300 text-sos-gray-700 text-xs font-semibold
+                                           hover:bg-sos-gray-50 transition cursor-pointer">
+                                <Upload className="w-3.5 h-3.5" /> Image
+                              </button>
+                            </div>
+                          )}
+                          {signMode === 'STAMP' && (
+                            <div className="space-y-2">
+                              <div className="bg-white border border-dashed border-sos-blue rounded-lg p-2 text-center">
+                                <p className="text-xs font-mono text-sos-gray-700">
+                                  Signé par {JSON.parse(localStorage.getItem('user') || '{}').name || 'Directeur'}<br />
+                                  Directeur Village — {new Date().toLocaleDateString('fr-FR')}
+                                </p>
+                              </div>
+                              <button onClick={() => handleSign('STAMP')} disabled={!!actionLoading}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                                           bg-sos-blue text-white text-xs font-semibold hover:bg-sos-blue-dark transition
+                                           disabled:opacity-60 cursor-pointer">
+                                {actionLoading === 'sign' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenTool className="w-3.5 h-3.5" />}
+                                Appliquer le tampon
+                              </button>
+                            </div>
+                          )}
+                          {signMode === 'IMAGE' && (
+                            <div className="space-y-2">
+                              <label className="flex flex-col items-center gap-1 border-2 border-dashed border-sos-gray-300
+                                                rounded-lg p-3 cursor-pointer hover:border-sos-blue transition">
+                                <Upload className="w-5 h-5 text-sos-gray-400" />
+                                <span className="text-[10px] text-sos-gray-500">{sigImage ? sigImage.name : 'Image PNG de signature'}</span>
+                                <input type="file" accept="image/png,image/jpeg" className="hidden"
+                                  onChange={(e) => setSigImage(e.target.files[0] || null)} />
+                              </label>
+                              {sigImage && <img src={URL.createObjectURL(sigImage)} alt="preview" className="mx-auto h-12 object-contain rounded border border-sos-gray-200" />}
+                              <button onClick={() => handleSign('IMAGE')} disabled={!sigImage || !!actionLoading}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+                                           bg-sos-blue text-white text-xs font-semibold hover:bg-sos-blue-dark transition
+                                           disabled:opacity-60 cursor-pointer">
+                                {actionLoading === 'sign' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenTool className="w-3.5 h-3.5" />}
+                                Signer
+                              </button>
+                            </div>
+                          )}
+                          <button onClick={() => { setSignTarget(null); setSignMode(null); setSigImage(null); }}
+                            className="w-full text-[10px] text-sos-gray-500 hover:text-sos-gray-700 cursor-pointer">Annuler</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Pièces jointes initiales (Level 1 uploads) if no workflow stages */}
+            {item.attachments?.length > 0 && !Object.values(stages).some(s => s?.attachments?.length > 0) && (
+              <div className="bg-sos-gray-50 rounded-xl p-4 border border-sos-gray-200">
+                <p className="text-xs font-bold text-sos-gray-700 uppercase tracking-wide mb-2">Pièces jointes originales</p>
                 <div className="space-y-1.5">
                   {item.attachments.map((a, i) => {
                     const mime = a.mimeType || '';
@@ -237,9 +459,8 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                           <button title="Aperçu" onClick={async () => {
                             try {
                               const { data } = await downloadAttachment(item._id, a.filename);
-                              const blob = new Blob([data], { type: mime });
-                              setPreviewFile({ url: URL.createObjectURL(blob), name: a.originalName || a.filename, type: mime });
-                            } catch { alert('Erreur aperçu.'); }
+                              setPreviewFile({ url: URL.createObjectURL(new Blob([data], { type: mime })), name: a.originalName || a.filename, type: mime });
+                            } catch { showToast('error', 'Erreur lors de l\'aperçu.'); }
                           }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
                             <Eye className="w-4 h-4 text-sos-blue" />
                           </button>
@@ -251,7 +472,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                             const link = document.createElement('a'); link.href = url;
                             link.setAttribute('download', a.originalName || a.filename);
                             document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-                          } catch { alert('Erreur téléchargement.'); }
+                          } catch { showToast('error', 'Erreur lors du téléchargement.'); }
                         }} className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer">
                           <Download className="w-4 h-4 text-sos-blue" />
                         </button>
@@ -262,87 +483,11 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
               </div>
             )}
 
-            {/* Rapport DPE */}
-            {hasDpeFinal ? (
-              <div>
-                <p className="text-xs text-sos-gray-500 mb-1.5">Rapport DPE (soumis le {fmtDate(item.reports.dpeFinal.metadata.submittedAt)})</p>
-                <button onClick={loadDpe}
-                  className="flex items-center gap-2 text-sm bg-white rounded-lg px-3 py-2 border border-sos-gray-200
-                             hover:bg-sos-blue-light transition cursor-pointer w-full">
-                  <FileCheck className="w-4 h-4 text-sos-green shrink-0" />
-                  <span className="text-sos-gray-700">Voir le rapport DPE Final</span>
-                  <Eye className="w-4 h-4 text-sos-blue ml-auto" />
-                </button>
-                {dpeContent && (
-                  <div className="mt-2 bg-white border border-sos-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto text-xs text-sos-gray-700 space-y-2">
-                    {dpeContent.titre && <p className="font-bold text-sm">{dpeContent.titre}</p>}
-                    {dpeContent.resume_signalement && <p><span className="font-semibold">Résumé :</span> {dpeContent.resume_signalement}</p>}
-                    {dpeContent.observations && <p><span className="font-semibold">Observations :</span> {dpeContent.observations}</p>}
-                    {dpeContent.evaluation_risque?.niveau && (
-                      <p><span className="font-semibold">Risque :</span> {dpeContent.evaluation_risque.niveau} — {dpeContent.evaluation_risque.justification}</p>
-                    )}
-                    {dpeContent.recommandations?.length > 0 && (
-                      <div><span className="font-semibold">Recommandations :</span>
-                        <ul className="list-disc ml-4 mt-1">{dpeContent.recommandations.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-sos-gray-400 italic">Rapport DPE non encore soumis par le psychologue.</p>
+            {/* No documents yet */}
+            {!Object.values(stages).some(s => s?.completed || s?.attachments?.length > 0) && !item.attachments?.length && (
+              <p className="text-xs text-sos-gray-400 italic">Aucun document soumis par le psychologue.</p>
             )}
           </div>
-
-          {/* ── Signature stamp / already signed ── */}
-          {item.directorSignature?.signedAt && (
-            <div className="space-y-3">
-              {/* Document overview with signature */}
-              <div className="bg-white border-2 border-sos-gray-200 rounded-xl p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-sos-gray-100">
-                  <FileCheck className="w-5 h-5 text-sos-blue" />
-                  <p className="text-sm font-bold text-sos-gray-800">Aperçu du dossier signé</p>
-                </div>
-
-                {/* Summary */}
-                <div className="space-y-2 mb-4 text-xs text-sos-gray-600">
-                  <div className="flex justify-between"><span className="font-medium text-sos-gray-500">Dossier</span><span className="font-semibold text-sos-gray-800">{item.title || item.incidentType}</span></div>
-                  <div className="flex justify-between"><span className="font-medium text-sos-gray-500">Village</span><span>{item.village?.name || '—'}</span></div>
-                  <div className="flex justify-between"><span className="font-medium text-sos-gray-500">Statut</span><span className="font-semibold text-sos-green">Clôturé & Signé</span></div>
-                  {item.assignedTo && <div className="flex justify-between"><span className="font-medium text-sos-gray-500">Psychologue</span><span>{item.assignedTo?.name || '—'}</span></div>}
-                  <div className="flex justify-between"><span className="font-medium text-sos-gray-500">Créé le</span><span>{fmtDate(item.createdAt)}</span></div>
-                </div>
-
-                {/* Signature block */}
-                <div className="border-t-2 border-dashed border-sos-blue/30 pt-4 mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <PenTool className="w-4 h-4 text-sos-blue" />
-                    <p className="text-xs font-bold text-sos-blue uppercase tracking-wide">Signature électronique</p>
-                  </div>
-
-                  {item.directorSignature.signatureType === 'STAMP' ? (
-                    <div className="bg-sos-blue-light/50 border border-dashed border-sos-blue rounded-lg p-3 text-center">
-                      <p className="text-sm font-mono text-sos-gray-700 whitespace-pre-line">{item.directorSignature.signatureData}</p>
-                    </div>
-                  ) : (
-                    <div className="bg-sos-gray-50 border border-sos-gray-200 rounded-lg p-3 flex flex-col items-center gap-2">
-                      <img
-                        src={`http://localhost:5000/uploads/${item.directorSignature.signatureData}`}
-                        alt="Signature du directeur"
-                        className="max-h-24 object-contain"
-                        onError={(e) => { e.target.style.display = 'none'; }}
-                      />
-                      <p className="text-xs text-sos-gray-500">Signature image — {item.directorSignature.signedBy?.name || 'Directeur'}</p>
-                    </div>
-                  )}
-
-                  <p className="text-[10px] text-sos-gray-400 mt-2 text-right">
-                    Signé le {fmtDate(item.directorSignature.signedAt)} par {item.directorSignature.signedBy?.name || 'Directeur Village'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Forwarded info */}
           {item.forwardedToNational && (
@@ -355,75 +500,6 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
             </div>
           )}
 
-          {/* ── Signing UI ── */}
-          {canSign && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-bold text-amber-800">Signature requise</p>
-              <p className="text-xs text-amber-700">
-                Veuillez signer ce dossier avant de l'envoyer au Responsable National.
-              </p>
-
-              {!signMode && (
-                <div className="flex gap-2">
-                  <button onClick={() => setSignMode('STAMP')}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl
-                               bg-sos-blue text-white text-sm font-semibold hover:bg-sos-blue-dark transition cursor-pointer">
-                    <Stamp className="w-4 h-4" /> Tampon numérique
-                  </button>
-                  <button onClick={() => setSignMode('IMAGE')}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl
-                               bg-white border border-sos-gray-300 text-sos-gray-700 text-sm font-semibold
-                               hover:bg-sos-gray-50 transition cursor-pointer">
-                    <Upload className="w-4 h-4" /> Image signature
-                  </button>
-                </div>
-              )}
-
-              {signMode === 'STAMP' && (
-                <div className="space-y-2">
-                  <div className="bg-white border border-dashed border-sos-blue rounded-lg p-3 text-center">
-                    <p className="text-sm font-mono text-sos-gray-700">
-                      Signé par {JSON.parse(localStorage.getItem('user') || '{}').name || 'Directeur'}<br />
-                      Directeur Village<br />
-                      {new Date().toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                  <button onClick={() => handleSign('STAMP')} disabled={!!actionLoading}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                               bg-sos-blue text-white text-sm font-semibold hover:bg-sos-blue-dark transition
-                               disabled:opacity-60 cursor-pointer">
-                    {actionLoading === 'sign' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenTool className="w-4 h-4" />}
-                    Appliquer le tampon
-                  </button>
-                  <button onClick={() => setSignMode(null)} className="w-full text-xs text-sos-gray-500 hover:text-sos-gray-700 cursor-pointer">Annuler</button>
-                </div>
-              )}
-
-              {signMode === 'IMAGE' && (
-                <div className="space-y-2">
-                  <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-sos-gray-300
-                                    rounded-lg p-4 cursor-pointer hover:border-sos-blue transition">
-                    <Upload className="w-6 h-6 text-sos-gray-400" />
-                    <span className="text-xs text-sos-gray-500">{sigImage ? sigImage.name : 'Déposer une image PNG de signature'}</span>
-                    <input type="file" accept="image/png,image/jpeg" className="hidden"
-                      onChange={(e) => setSigImage(e.target.files[0] || null)} />
-                  </label>
-                  {sigImage && (
-                    <img src={URL.createObjectURL(sigImage)} alt="preview" className="mx-auto h-16 object-contain rounded border border-sos-gray-200" />
-                  )}
-                  <button onClick={() => handleSign('IMAGE')} disabled={!sigImage || !!actionLoading}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                               bg-sos-blue text-white text-sm font-semibold hover:bg-sos-blue-dark transition
-                               disabled:opacity-60 cursor-pointer">
-                    {actionLoading === 'sign' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenTool className="w-4 h-4" />}
-                    Signer avec l'image
-                  </button>
-                  <button onClick={() => { setSignMode(null); setSigImage(null); }} className="w-full text-xs text-sos-gray-500 hover:text-sos-gray-700 cursor-pointer">Annuler</button>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* ── Actions ── */}
           <div className="pt-4 border-t border-sos-gray-200 space-y-2">
             {canForward && (
@@ -432,8 +508,14 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                            bg-sos-green text-white text-sm font-semibold hover:bg-green-700 transition
                            disabled:opacity-60 cursor-pointer">
                 {actionLoading === 'forward' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Signer & Envoyer au Responsable National
+                Envoyer au Responsable National
               </button>
+            )}
+            {canSign && !bothSigned && (
+              <p className="text-xs text-center text-amber-600">
+                {!ficheSigned && !dpeSigned ? 'Signez la Fiche Initiale et le Rapport DPE pour pouvoir transmettre.' :
+                 !ficheSigned ? 'Il reste à signer la Fiche Initiale.' : 'Il reste à signer le Rapport DPE.'}
+              </p>
             )}
             {item.status === 'CLOTURE' && !item.isArchived && (
               <button onClick={handleArchive} disabled={!!actionLoading}
@@ -474,7 +556,8 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
           </div>
         </div>
       )}
-    </div>
+      {/* Toast notification */}
+      <Toast toast={toast} onDismiss={dismissToast} />    </div>
   );
 };
 
@@ -569,7 +652,7 @@ export default function DashboardDirecteur() {
   };
 
   // Director queue filters
-  const pending   = signalements.filter(s => s.directorReviewStatus === 'PENDING'
+  const pending   = signalements.filter(s => ['PENDING', 'PARTIALLY_SIGNED'].includes(s.directorReviewStatus)
                     || (s.status === 'CLOTURE' && !s.directorReviewStatus && !s.isArchived));
   const signed    = signalements.filter(s => s.directorReviewStatus === 'SIGNED');
   const forwarded = signalements.filter(s => s.directorReviewStatus === 'FORWARDED');

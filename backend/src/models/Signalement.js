@@ -396,14 +396,30 @@ const signalementSchema = new mongoose.Schema({
   // ── Director Village review & signature ──
   directorReviewStatus: {
     type: String,
-    enum: ['PENDING', 'SIGNED', 'FORWARDED', null],
+    enum: ['PENDING', 'PARTIALLY_SIGNED', 'SIGNED', 'FORWARDED', null],
     default: null
   },
+  // Legacy single signature (kept for backward compat)
   directorSignature: {
     signedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     signedAt: Date,
     signatureType: { type: String, enum: ['STAMP', 'IMAGE'] },
-    signatureData: String   // base64 stamp text or filename of uploaded PNG
+    signatureData: String
+  },
+  // New: separate signatures for each document
+  directorSignatures: {
+    ficheInitiale: {
+      signedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      signedAt: Date,
+      signatureType: { type: String, enum: ['STAMP', 'IMAGE'] },
+      signatureData: String
+    },
+    rapportDpe: {
+      signedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      signedAt: Date,
+      signatureType: { type: String, enum: ['STAMP', 'IMAGE'] },
+      signatureData: String
+    }
   },
   forwardedToNational: { type: Boolean, default: false },
   forwardedAt: Date,

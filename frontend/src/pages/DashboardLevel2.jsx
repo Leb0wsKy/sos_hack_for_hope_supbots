@@ -34,6 +34,7 @@ import {
   closeWorkflow,
 } from '../services/api';
 import BackgroundPattern from '../components/BackgroundPattern';
+import { Toast, useToast } from '../components/Toast';
 
 /* ═══════════════════════════════════════════════════════
    Constants
@@ -300,6 +301,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const [dpeResult, setDpeResult] = useState(null);
   const [showFullDpe, setShowFullDpe] = useState(false);
   const [previewFile, setPreviewFile] = useState(null); // { url, name, type }
+  const [toast, showToast, dismissToast] = useToast();
 
   // Fetch the real Workflow document from the backend
   const fetchWorkflow = useCallback(async () => {
@@ -352,9 +354,9 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       // Show success message
       if (response.data.deadlineAt) {
         const deadline = new Date(response.data.deadlineAt);
-        alert(`✅ Signalement sauvegardé avec succès!\n\n⏰ Délai: ${deadline.toLocaleString('fr-FR')}\n⚠️ Vous avez 24 heures pour traiter ce signalement.`);
+        showToast('success', `Délai: ${deadline.toLocaleString('fr-FR')} — Vous avez 24h pour traiter ce signalement.`, 'Signalement sauvegardé', 5000);
       } else {
-        alert('✅ Signalement sauvegardé avec succès!');
+        showToast('success', 'Signalement sauvegardé avec succès.');
       }
       
       onRefresh();
@@ -366,20 +368,20 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
         console.log('Error data:', error.response.data);
         
         if (error.response.status === 403) {
-          alert('❌ Erreur: Ce signalement est déjà pris en charge par un autre utilisateur.');
+          showToast('error', 'Ce signalement est déjà pris en charge par un autre utilisateur.');
         } else if (error.response.status === 400) {
-          alert('⚠️ Attention: Vous avez déjà sauvegardé ce signalement.');
+          showToast('warning', 'Vous avez déjà sauvegardé ce signalement.');
         } else if (error.response.status === 401) {
-          alert('🔒 Erreur: Vous n\'êtes pas authentifié. Veuillez vous reconnecter.');
+          showToast('error', 'Vous n\'êtes pas authentifié. Veuillez vous reconnecter.');
         } else {
-          alert(`❌ Erreur ${error.response.status}: ${error.response.data.message || 'Erreur inconnue'}`);
+          showToast('error', error.response.data.message || 'Erreur inconnue');
         }
       } else if (error.request) {
         console.log('No response received:', error.request);
-        alert('🌐 Erreur: Impossible de contacter le serveur. Vérifiez que le backend est démarré sur le port 5000.');
+        showToast('error', 'Impossible de contacter le serveur.');
       } else {
         console.log('Request setup error:', error.message);
-        alert(`⚙️ Erreur de configuration: ${error.message}`);
+        showToast('error', error.message);
       }
     }
     setActionLoading('');
@@ -393,7 +395,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       onRefresh();
     } catch (error) {
       console.error('Create workflow failed:', error);
-      alert(error.response?.data?.message || 'Erreur lors de la création du workflow');
+      showToast('error', error.response?.data?.message || 'Erreur lors de la création du workflow');
     }
     setActionLoading('');
   };
@@ -413,17 +415,17 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     try {
       await classifyAPI(wf._id, classification);
       if (classification === 'SAUVEGARDE') {
-        alert('✅ Classification : Sauvegarde. Le workflow 6 étapes est maintenant actif.');
+        showToast('success', 'Le workflow 6 étapes est maintenant actif.', 'Classification : Sauvegarde');
       } else if (classification === 'PRISE_EN_CHARGE') {
-        alert('✅ Prise en charge enregistrée. Le signalement a été clôturé (pas de workflow requis).');
+        showToast('success', 'Le signalement a été clôturé (pas de workflow requis).', 'Prise en charge');
       } else if (classification === 'FAUX_SIGNALEMENT') {
-        alert('🚫 Signalement marqué comme faux. Il a été archivé.');
+        showToast('warning', 'Signalement marqué comme faux. Il a été archivé.');
       }
       await fetchWorkflow();
       onRefresh();
     } catch (error) {
       console.error('Classification failed:', error);
-      alert(error.response?.data?.message || 'Erreur lors de la classification');
+      showToast('error', error.response?.data?.message || 'Erreur lors de la classification');
     }
     setActionLoading('');
   };
@@ -431,13 +433,13 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
   const handleAdvanceStage = async () => {
     if (!wf?._id || !nextStage) return;
     if (stageFiles.length === 0) {
-      alert('⚠️ Vous devez téléverser au moins un document pour valider cette étape.');
+      showToast('warning', 'Vous devez téléverser au moins un document pour valider cette étape.');
       return;
     }
 
     // For rapportDpe stage, check DPE was generated
     if (nextStage.isDpe && !wf.dpeGenerated) {
-      alert('⚠️ Vous devez d\'abord générer le Rapport DPE par l\'IA avant de valider cette étape.');
+      showToast('warning', 'Vous devez d\'abord générer le Rapport DPE par l\'IA avant de valider cette étape.');
       return;
     }
 
@@ -454,7 +456,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       onRefresh();
     } catch (error) {
       console.error('Stage advance failed:', error);
-      alert(error.response?.data?.message || 'Erreur lors de la validation de l\'étape');
+      showToast('error', error.response?.data?.message || 'Erreur lors de la validation de l\'étape');
     }
     setActionLoading('');
   };
@@ -472,7 +474,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Template download failed:', error);
-      alert('Erreur lors du téléchargement du template');
+      showToast('error', 'Erreur lors du téléchargement du template');
     }
   };
 
@@ -568,10 +570,10 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
       // Mark DPE as generated on the workflow
       await markDpeGenerated(wf._id);
       await fetchWorkflow();
-      alert(`✅ ${data.message || 'Rapport DPE généré avec succès!'}`);
+      showToast('success', data.message || 'Rapport DPE généré avec succès!');
     } catch (error) {
       console.error('DPE generation failed:', error);
-      alert(error.response?.data?.message || 'Erreur lors de la génération du rapport DPE');
+      showToast('error', error.response?.data?.message || 'Erreur lors de la génération du rapport DPE');
     }
     setActionLoading('');
   };
@@ -583,12 +585,12 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
     setActionLoading('close');
     try {
       await closeWorkflow(wf._id, reason || undefined);
-      alert('✅ Dossier soumis au Directeur Village pour signature.');
+      showToast('success', 'Dossier soumis au Directeur Village pour signature.');
       await fetchWorkflow();
       onRefresh();
     } catch (error) {
       console.error('Close workflow failed:', error);
-      alert(error.response?.data?.message || 'Erreur lors de la clôture');
+      showToast('error', error.response?.data?.message || 'Erreur lors de la clôture');
     }
     setActionLoading('');
   };
@@ -698,7 +700,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                               setPreviewFile({ url, name: a.originalName || a.filename, type: mime });
                             } catch (err) {
                               console.error('Preview failed:', err);
-                              alert('Erreur lors de l\'aperçu du fichier.');
+                              showToast('error', 'Erreur lors de l\'aperçu du fichier.');
                             }
                           }}
                           className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer"
@@ -721,7 +723,7 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                             window.URL.revokeObjectURL(url);
                           } catch (err) {
                             console.error('Download failed:', err);
-                            alert('Erreur lors du téléchargement du fichier.');
+                            showToast('error', 'Erreur lors du téléchargement du fichier.');
                           }
                         }}
                         className="p-1 rounded hover:bg-sos-blue-light transition cursor-pointer"
@@ -1205,11 +1207,11 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
                     setActionLoading('faux');
                     try {
                       await markSignalementFaux(item._id);
-                      alert('✅ Signalement marqué comme fausse alarme.');
+                      showToast('success', 'Signalement marqué comme fausse alarme.');
                       onRefresh();
                     } catch (err) {
                       console.error('markFaux failed:', err);
-                      alert(err.response?.data?.message || 'Erreur lors du marquage.');
+                      showToast('error', err.response?.data?.message || 'Erreur lors du marquage.');
                     }
                     setActionLoading('');
                   }}
@@ -1245,6 +1247,9 @@ const DetailDrawer = ({ item, onClose, onRefresh }) => {
           </div>
         </div>
       </div>
+
+      {/* Toast notification */}
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   );
 };
@@ -1258,6 +1263,7 @@ function DashboardLevel2() {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [filterUrgency, setFilterUrgency] = useState('');
+  const [mainToast, showMainToast, dismissMainToast] = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1271,7 +1277,7 @@ function DashboardLevel2() {
     } catch (error) {
       console.error('Error fetching signalements:', error);
       // Show error to user
-      alert('Erreur: Impossible de charger les signalements. Vérifiez que le serveur backend est démarré.');
+      showMainToast('error', 'Impossible de charger les signalements. Vérifiez que le serveur backend est démarré.');
     }
     setLoading(false);
   }, []);
@@ -1461,6 +1467,9 @@ function DashboardLevel2() {
       {selected && (
         <DetailDrawer item={selected} onClose={() => setSelected(null)} onRefresh={handleRefresh} />
       )}
+
+      {/* Main dashboard toast */}
+      <Toast toast={mainToast} onDismiss={dismissMainToast} />
       </div>
     </div>
   );

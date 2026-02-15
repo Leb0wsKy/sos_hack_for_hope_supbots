@@ -163,6 +163,9 @@ export const getSignalements = async (req, res) => {
     if (urgencyLevel) filter.urgencyLevel = urgencyLevel;
     if (incidentType) filter.incidentType = incidentType;
 
+    // Exclude archived signalements from all views
+    filter.isArchived = { $ne: true };
+
     if (req.user.role === 'LEVEL2' && village) {
       if (!req.accessibleVillages || !req.accessibleVillages.includes(village)) {
         return res.status(403).json({
@@ -210,6 +213,8 @@ export const getSignalements = async (req, res) => {
       .populate('assignedTo', 'name email')
       .populate('classifiedBy', 'name')
       .populate('directorSignature.signedBy', 'name email')
+      .populate('directorSignatures.ficheInitiale.signedBy', 'name email')
+      .populate('directorSignatures.rapportDpe.signedBy', 'name email')
       .populate('workflow', 'currentStage status stages assignedTo classification')
       .populate('workflowRef', 'currentStage status stages assignedTo classification')
       .sort({ createdAt: -1 });
@@ -679,19 +684,22 @@ export const getMySignalementsWithDeadlines = async (req, res) => {
 };
 
 /* ══════════════════════════════════════════════════════
-   Director Village — Sign dossier
+   Director Village — Sign a specific document (fiche initiale or rapport DPE)
    ══════════════════════════════════════════════════════ */
 export const directorSign = async (req, res) => {
   try {
     const { id } = req.params;
-    const { signatureType } = req.body; // 'STAMP' or 'IMAGE'
+    const { signatureType, target } = req.body; // target: 'FICHE_INITIALE' or 'RAPPORT_DPE'
+
+    if (!target || !['FICHE_INITIALE', 'RAPPORT_DPE'].includes(target)) {
+      return res.status(400).json({ message: 'Le champ "target" est requis (FICHE_INITIALE ou RAPPORT_DPE).' });
+    }
 
     const signalement = await Signalement.findById(id);
     if (!signalement) return res.status(404).json({ message: 'Signalement not found' });
 
-    // Only allow signing once
-    if (signalement.directorReviewStatus === 'SIGNED' || signalement.directorReviewStatus === 'FORWARDED') {
-      return res.status(400).json({ message: 'Ce dossier a déjà été signé.' });
+    if (signalement.directorReviewStatus === 'FORWARDED') {
+      return res.status(400).json({ message: 'Ce dossier a déjà été transmis au national.' });
     }
 
     // Village scope check
@@ -704,24 +712,53 @@ export const directorSign = async (req, res) => {
     if (type === 'IMAGE' && req.file) {
       signatureData = req.file.filename; // stored in uploads/
     } else {
-      // Stamp: name + role + date
       signatureData = `Signé par ${req.user.name} — Directeur Village — ${new Date().toLocaleDateString('fr-FR')}`;
     }
 
-    signalement.directorReviewStatus = 'SIGNED';
-    signalement.directorSignature = {
+    const sigObj = {
       signedBy: req.user.id,
       signedAt: new Date(),
       signatureType: type,
       signatureData
     };
 
+    // Initialize directorSignatures if needed
+    if (!signalement.directorSignatures) {
+      signalement.directorSignatures = {};
+    }
+
+    const targetKey = target === 'FICHE_INITIALE' ? 'ficheInitiale' : 'rapportDpe';
+
+    // Check if already signed
+    if (signalement.directorSignatures[targetKey]?.signedAt) {
+      return res.status(400).json({ message: `Le document "${target === 'FICHE_INITIALE' ? 'Fiche Initiale' : 'Rapport DPE'}" a déjà été signé.` });
+    }
+
+    signalement.directorSignatures[targetKey] = sigObj;
+
+    // Also update legacy single signature for backward compat
+    signalement.directorSignature = sigObj;
+
+    // Determine review status
+    const ficheS = signalement.directorSignatures.ficheInitiale?.signedAt;
+    const dpeS = signalement.directorSignatures.rapportDpe?.signedAt;
+
+    if (ficheS && dpeS) {
+      signalement.directorReviewStatus = 'SIGNED';
+    } else {
+      signalement.directorReviewStatus = 'PARTIALLY_SIGNED';
+    }
+
+    signalement.markModified('directorSignatures');
     await signalement.save();
 
     await signalement.populate('village', 'name location region');
     await signalement.populate('directorSignature.signedBy', 'name email');
+    await signalement.populate('directorSignatures.ficheInitiale.signedBy', 'name email');
+    await signalement.populate('directorSignatures.rapportDpe.signedBy', 'name email');
 
-    res.json({ message: 'Dossier signé avec succès.', signalement });
+    const targetLabel = target === 'FICHE_INITIALE' ? 'Fiche Initiale' : 'Rapport DPE';
+    res.json({ message: `${targetLabel} signé avec succès.`, signalement });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -737,8 +774,18 @@ export const directorForward = async (req, res) => {
     const signalement = await Signalement.findById(id);
     if (!signalement) return res.status(404).json({ message: 'Signalement not found' });
 
-    if (signalement.directorReviewStatus !== 'SIGNED') {
-      return res.status(400).json({ message: 'Le dossier doit être signé avant d\'être envoyé au Responsable National.' });
+    // Must have BOTH documents signed
+    const ficheS = signalement.directorSignatures?.ficheInitiale?.signedAt;
+    const dpeS = signalement.directorSignatures?.rapportDpe?.signedAt;
+
+    if (!ficheS || !dpeS) {
+      return res.status(400).json({ 
+        message: 'Les deux documents (Fiche Initiale et Rapport DPE) doivent être signés avant la transmission.' 
+      });
+    }
+
+    if (signalement.directorReviewStatus === 'FORWARDED') {
+      return res.status(400).json({ message: 'Ce dossier a déjà été transmis.' });
     }
 
     const scopeError = enforceVillageScope(req, signalement);

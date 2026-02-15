@@ -549,3 +549,33 @@ export const closeWorkflow = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+/* ══════════════════════════════════════════════════════
+   Download workflow stage attachment
+   (Accessible by Director Village + National + SuperAdmin)
+   ══════════════════════════════════════════════════════ */
+export const downloadWorkflowAttachment = async (req, res) => {
+  try {
+    const { workflowId, stage, filename } = req.params;
+    const workflow = await Workflow.findById(workflowId).populate('signalement');
+    if (!workflow) return res.status(404).json({ message: 'Workflow not found' });
+
+    const validStages = ['ficheInitiale', 'rapportDpe', 'evaluationComplete', 'planAction', 'rapportSuivi', 'rapportFinal'];
+    if (!validStages.includes(stage)) return res.status(400).json({ message: 'Invalid stage' });
+
+    const stageData = workflow.stages?.[stage];
+    if (!stageData) return res.status(404).json({ message: 'Stage not found' });
+
+    const attachment = stageData.attachments?.find(a => a.filename === filename);
+    if (!attachment) return res.status(404).json({ message: 'Attachment not found in this stage' });
+
+    const filePath = path.join(__dirname, '../../uploads', filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'File not found on server' });
+
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName || filename}"`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
