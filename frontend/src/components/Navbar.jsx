@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Menu, X, User, ChevronDown, Bell, Home } from 'lucide-react';
+import { LogOut, Menu, X, User, ChevronDown, Bell, Home, ClipboardList, Building2, Globe, BarChart3, ShieldCheck } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 /* ── SOS brand logo with actual logo image ── */
@@ -30,10 +30,11 @@ const ROLE_LABELS = {
 };
 
 const navLinks = [
-  { to: '/dashboard-level1', label: 'Signalement', roles: ['LEVEL1', 'LEVEL2', 'LEVEL3', 'LEVEL4'], icon: Home },
-  { to: '/dashboard-level2', label: 'Traitement', roles: ['LEVEL2', 'LEVEL3', 'LEVEL4'] },
-  { to: '/dashboard-level3', label: 'Gouvernance', roles: ['LEVEL3', 'LEVEL4'] },
-  { to: '/dashboard-level4', label: 'Admin', roles: ['LEVEL4'] },
+  { to: '/dashboard-level1', label: 'Signalement', roles: ['LEVEL1'], icon: Home },
+  { to: '/dashboard-level2', label: 'Traitement', roles: ['LEVEL2'], icon: ClipboardList },
+  { to: '/dashboard-directeur', label: 'Directeur', roles: ['LEVEL3'], roleDetails: ['VILLAGE_DIRECTOR'], icon: Building2 },
+  { to: '/dashboard-national', label: 'National', roles: ['LEVEL3'], roleDetails: ['NATIONAL_OFFICE'], icon: Globe },
+  { to: '/dashboard-level4', label: 'Admin', roles: ['LEVEL4'], icon: ShieldCheck },
 ];
 
 function Navbar() {
@@ -69,9 +70,15 @@ function Navbar() {
     navigate('/login');
   };
 
-  const visibleLinks = navLinks.filter(
-    (l) => !user || l.roles.includes(user.role)
-  );
+  const visibleLinks = navLinks.filter((l) => {
+    if (!user) return false;
+    if (!l.roles.includes(user.role)) return false;
+    // Sub-role specific: only show for matching roleDetails
+    if (l.roleDetails) {
+      return l.roleDetails.includes(user.roleDetails);
+    }
+    return true;
+  });
 
   // Hide navbar on landing and login pages
   if (!token || location.pathname === '/' || location.pathname === '/login') return null;
