@@ -18,6 +18,7 @@ import dpeRoutes from './routes/dpe.js';
 import level2Routes from './routes/level2.js';
 import historyRoutes from './routes/history.js';
 import { setSocketServer } from './services/socket.js';
+import { startDeadlineScheduler } from './services/deadlineScheduler.js';
 
 dotenv.config();
 
@@ -130,4 +131,7 @@ server.listen(PORT, () => {
   console.log(`✓ Server running on port ${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✓ API Base URL: http://localhost:${PORT}`);
+
+  // Start deadline reminder scheduler
+  startDeadlineScheduler();
 });

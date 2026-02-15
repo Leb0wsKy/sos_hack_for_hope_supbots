@@ -1,6 +1,8 @@
 import Workflow from '../models/Workflow.js';
 import Signalement from '../models/Signalement.js';
+import User from '../models/User.js';
 import { emitEvent } from '../services/socket.js';
+import { notifyDocumentToSign, notifySignalementStatusChanged } from '../services/emailService.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -352,6 +354,22 @@ export const classifySignalement = async (req, res) => {
         village: signalement.village,
         createdBy: signalement.createdBy
       });
+
+      // Email Level 1 creator about status change
+      if (signalement.createdBy) {
+        User.findById(signalement.createdBy).select('email name').then(creator => {
+          if (creator) {
+            notifySignalementStatusChanged({
+              email: creator.email,
+              name: creator.name,
+              signalementTitle: signalement.title,
+              oldStatus: 'EN_COURS',
+              newStatus: signalement.status,
+              signalementId: signalement._id
+            }).catch(err => console.error('Email notification error:', err.message));
+          }
+        }).catch(err => console.error('Email notification lookup error:', err.message));
+      }
     }
 
     emitEvent('signalement.classified', {
@@ -543,6 +561,31 @@ export const closeWorkflow = async (req, res) => {
         village: signalement.village,
         submittedBy: req.user.id
       });
+
+      // Email Level 3 Village Directors to sign the documents
+      if (signalement.village) {
+        User.find({
+          role: 'LEVEL3',
+          roleDetails: 'VILLAGE_DIRECTOR',
+          village: signalement.village,
+          isActive: true
+        }).select('email name').then(async (directors) => {
+          // If no village-scoped director, find all directors
+          const targets = directors.length > 0 ? directors :
+            await User.find({ role: 'LEVEL3', roleDetails: 'VILLAGE_DIRECTOR', isActive: true }).select('email name');
+          const villageName = signalement.village?.name || 'Village';
+          targets.forEach(d => {
+            notifyDocumentToSign({
+              email: d.email,
+              name: d.name,
+              signalementTitle: signalement.title,
+              signalementId: signalement._id,
+              villageName,
+              submittedByName: req.user.name
+            }).catch(err => console.error('Email notification error:', err.message));
+          });
+        }).catch(err => console.error('Email notification lookup error:', err.message));
+      }
     }
 
     res.json({ success: true, message: 'Dossier soumis au Directeur Village pour signature.', workflow });

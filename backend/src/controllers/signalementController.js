@@ -5,6 +5,12 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { emitEvent } from '../services/socket.js';
+import {
+  notifyNewSignalementInVillage,
+  notifySignalementStatusChanged,
+  notifyDocumentSigned,
+  notifyDocumentToSign
+} from '../services/emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,6 +131,26 @@ export const createSignalement = async (req, res) => {
       village: signalement.village?._id || signalement.village,
       urgencyLevel: signalement.urgencyLevel || null
     });
+
+    // Notify Level 2 users in the same village about the new signalement
+    if (resolvedVillage) {
+      User.find({ role: 'LEVEL2', village: resolvedVillage, isActive: true })
+        .select('email name')
+        .then(level2Users => {
+          const villageName = signalement.village?.name || 'Village';
+          level2Users.forEach(u => {
+            notifyNewSignalementInVillage({
+              email: u.email,
+              name: u.name,
+              signalementTitle: signalement.title,
+              villageName,
+              urgencyLevel: signalement.urgencyLevel,
+              incidentType: signalement.incidentType
+            }).catch(err => console.error('Email notification error:', err.message));
+          });
+        })
+        .catch(err => console.error('Email notification lookup error:', err.message));
+    }
 
     res.status(201).json(maskAnonymousSignalement(signalement));
   } catch (error) {
@@ -325,6 +351,22 @@ export const closeSignalement = async (req, res) => {
     signalement.closureReason = closureReason;
 
     await signalement.save();
+
+    // Notify Level 1 creator about status change
+    if (signalement.createdBy) {
+      User.findById(signalement.createdBy).select('email name').then(creator => {
+        if (creator) {
+          notifySignalementStatusChanged({
+            email: creator.email,
+            name: creator.name,
+            signalementTitle: signalement.title,
+            oldStatus: 'EN_COURS',
+            newStatus: 'CLOTURE',
+            signalementId: signalement._id
+          }).catch(err => console.error('Email notification error:', err.message));
+        }
+      }).catch(err => console.error('Email notification lookup error:', err.message));
+    }
 
     emitEvent('signalement.closed', {
       id: signalement._id,
@@ -579,7 +621,7 @@ export const markAsFaux = async (req, res) => {
       });
     }
 
-    signalement.status = 'FAUX_SIGNALEMENT';
+    signalement.status = 'CLOTURE';
     signalement.classification = 'FAUX_SIGNALEMENT';
     signalement.closedBy = req.user.id;
     signalement.closedAt = new Date();
@@ -589,11 +631,23 @@ export const markAsFaux = async (req, res) => {
     await signalement.populate('village', 'name location region');
     await signalement.populate('createdBy', 'name email role');
 
+    // Notify Level 1 creator about faux signalement status
+    if (signalement.createdBy) {
+      notifySignalementStatusChanged({
+        email: signalement.createdBy.email,
+        name: signalement.createdBy.name,
+        signalementTitle: signalement.title,
+        oldStatus: 'EN_ATTENTE',
+        newStatus: 'FAUX_SIGNALEMENT',
+        signalementId: signalement._id
+      }).catch(err => console.error('Email notification error:', err.message));
+    }
+
     // Notify the Level 1 creator
     const { emitEvent } = await import('../services/socket.js');
     emitEvent('signalement.closed', {
       id: signalement._id,
-      status: 'FAUX_SIGNALEMENT',
+      status: 'CLOTURE',
       closedBy: req.user.id,
       village: signalement.village
     });
@@ -809,6 +863,23 @@ export const directorSign = async (req, res) => {
     await signalement.populate('directorSignatures.rapportDpe.signedBy', 'name email');
 
     const targetLabel = target === 'FICHE_INITIALE' ? 'Fiche Initiale' : 'Rapport DPE';
+
+    // Notify Level 2 user (assignee) that the document was signed
+    if (signalement.assignedTo) {
+      User.findById(signalement.assignedTo).select('email name').then(assignee => {
+        if (assignee) {
+          notifyDocumentSigned({
+            email: assignee.email,
+            name: assignee.name,
+            signalementTitle: signalement.title,
+            signalementId: signalement._id,
+            documentName: targetLabel,
+            signedByName: req.user.name
+          }).catch(err => console.error('Email notification error:', err.message));
+        }
+      }).catch(err => console.error('Email notification lookup error:', err.message));
+    }
+
     res.json({ message: `${targetLabel} signé avec succès.`, signalement });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

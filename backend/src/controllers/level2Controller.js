@@ -1,7 +1,9 @@
 import Signalement from '../models/Signalement.js';
 import Notification from '../models/Notification.js';
 import AuditLog from '../models/AuditLog.js';
+import User from '../models/User.js';
 import { emitEvent } from '../services/socket.js';
+import { notifySignalementStatusChanged } from '../services/emailService.js';
 
 /**
  * 1) List signalements for Level 2 treatment
@@ -152,6 +154,22 @@ export const classifySignalement = async (req, res) => {
         priority: 'NORMAL',
         createdBy: req.user.id
       });
+    }
+
+    // Email Level 1 creator about the classification / status change
+    if (signalement.createdBy) {
+      User.findById(signalement.createdBy).select('email name').then(creator => {
+        if (creator) {
+          notifySignalementStatusChanged({
+            email: creator.email,
+            name: creator.name,
+            signalementTitle: signalement.title,
+            oldStatus: 'EN_ATTENTE',
+            newStatus: signalement.status,
+            signalementId: signalement._id
+          }).catch(err => console.error('Email notification error:', err.message));
+        }
+      }).catch(err => console.error('Email notification lookup error:', err.message));
     }
     
     res.json({

@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Village from '../models/Village.js';
 import Signalement from '../models/Signalement.js';
 import AuditLog from '../models/AuditLog.js';
+import { notifyAccountCreated, notifyRoleChanged } from '../services/emailService.js';
 
 const sanitizeUser = (user) => {
   if (!user) return null;
@@ -57,6 +58,15 @@ export const createUser = async (req, res) => {
       phone: phone || undefined,
       isActive: true
     });
+
+    // Send welcome email with credentials
+    notifyAccountCreated({
+      email,
+      name,
+      role,
+      roleDetails,
+      plainPassword: password
+    }).catch(err => console.error('Email notification error:', err.message));
 
     res.status(201).json({ user: sanitizeUser(user) });
   } catch (error) {
@@ -156,6 +166,8 @@ export const updateUserRole = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const oldRole = user.role;
+
     user.role = role;
     if (roleDetails) user.roleDetails = roleDetails;
     if (village) user.village = village;
@@ -167,6 +179,17 @@ export const updateUserRole = async (req, res) => {
     }
 
     await user.save();
+
+    // Notify user of role change by email
+    if (oldRole !== role) {
+      notifyRoleChanged({
+        email: user.email,
+        name: user.name,
+        oldRole,
+        newRole: role,
+        newRoleDetails: roleDetails
+      }).catch(err => console.error('Email notification error:', err.message));
+    }
 
     const updatedUser = await User.findById(id).populate('village', 'name location');
     res.json({ user: sanitizeUser(updatedUser) });
