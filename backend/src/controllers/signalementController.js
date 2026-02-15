@@ -559,7 +559,7 @@ export const markAsFaux = async (req, res) => {
       });
     }
 
-    signalement.status = 'FAUX_SIGNALEMENT';
+    signalement.status = 'CLOTURE';
     signalement.classification = 'FAUX_SIGNALEMENT';
     signalement.closedBy = req.user.id;
     signalement.closedAt = new Date();
@@ -573,7 +573,7 @@ export const markAsFaux = async (req, res) => {
     const { emitEvent } = await import('../services/socket.js');
     emitEvent('signalement.closed', {
       id: signalement._id,
-      status: 'FAUX_SIGNALEMENT',
+      status: 'CLOTURE',
       closedBy: req.user.id,
       village: signalement.village
     });

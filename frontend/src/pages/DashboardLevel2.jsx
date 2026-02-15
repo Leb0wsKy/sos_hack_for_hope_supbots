@@ -297,162 +297,36 @@ const MLPredictionModal = ({ prediction, onConfirm, onCancel }) => {
 
   const hasError = prediction.error;
   const isFalseAlarm = prediction.is_false_alarm;
-  const confidence = prediction.confidence || 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-gray-900/75 backdrop-blur-md" onClick={onCancel} />
-      
-      {/* Modal */}
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl animate-fade-in overflow-hidden">
-        {/* Close Button */}
-        <button
-          onClick={onCancel}
-          className="absolute top-6 right-6 z-10 w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow-lg flex items-center justify-center text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Header */}
-        <div className="relative bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600 px-10 py-12 text-white overflow-hidden">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
-          <div className="relative flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-xl flex items-center justify-center">
-              <Activity className="w-9 h-9 text-white" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">Analyse IA</h2>
-              <p className="text-blue-100 mt-1 text-base">Détection automatique des fausses alarmes</p>
-            </div>
-          </div>
-        </div>
-
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-2xl w-[400px]" onClick={(e) => e.stopPropagation()}>
         {/* Content */}
-        <div className="px-10 py-8">
+        <div className="p-8 text-center">
           {hasError ? (
-            <div className="bg-amber-50 rounded-2xl p-6 border-l-4 border-amber-400">
-              <div className="flex gap-4">
-                <div className="flex-shrink-0">
-                  <AlertTriangle className="w-6 h-6 text-amber-600" />
-                </div>
-                <div>
-                  <h4 className="text-lg font-semibold text-amber-900 mb-2">Service temporairement indisponible</h4>
-                  <p className="text-amber-800 leading-relaxed">
-                    Le service d'intelligence artificielle ne peut être contacté. Vous pouvez continuer l'action manuellement.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <p className="text-lg font-bold text-gray-700">Service IA indisponible</p>
           ) : (
-            <div className="space-y-6">
-              {/* Main Result */}
-              <div className={`relative overflow-hidden rounded-2xl p-6 ${
-                isFalseAlarm 
-                  ? 'bg-gradient-to-br from-rose-50 via-red-50 to-pink-50' 
-                  : 'bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50'
-              }`}>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-4 mb-5">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-                      isFalseAlarm ? 'bg-red-500' : 'bg-green-500'
-                    }`}>
-                      {isFalseAlarm ? (
-                        <X className="w-8 h-8 text-white" />
-                      ) : (
-                        <CheckCircle2 className="w-8 h-8 text-white" />
-                      )}
-                    </div>
-                    <div>
-                      <span className={`text-2xl font-bold ${
-                        isFalseAlarm ? 'text-red-900' : 'text-green-900'
-                      }`}>
-                        {isFalseAlarm ? 'Fausse Alarme Détectée' : 'Signalement Authentique'}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-gray-700">Niveau de confiance</span>
-                      <span className="font-bold text-gray-900 text-lg">{confidence}%</span>
-                    </div>
-                    <div className="relative h-3 bg-white/60 rounded-full overflow-hidden shadow-inner">
-                      <div 
-                        className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out ${
-                          isFalseAlarm 
-                            ? 'bg-gradient-to-r from-red-500 via-rose-500 to-pink-500' 
-                            : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500'
-                        }`}
-                        style={{ width: `${confidence}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Probabilities Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl p-5 border-2 border-green-200 hover:border-green-300 transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Signalement Réel</span>
-                  </div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {prediction.probabilities?.real_signalement}%
-                  </div>
-                </div>
-                
-                <div className="bg-white rounded-xl p-5 border-2 border-red-200 hover:border-red-300 transition-colors">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-red-500" />
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Fausse Alarme</span>
-                  </div>
-                  <div className="text-3xl font-bold text-red-600">
-                    {prediction.probabilities?.false_alarm}%
-                  </div>
-                </div>
-              </div>
-
-              {/* Recommendation */}
-              <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-white" />
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-blue-900 mb-1">Recommandation</h4>
-                    <p className="text-sm text-blue-800 leading-relaxed">{prediction.recommendation}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Warning */}
-              <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
-                <p className="text-sm text-yellow-900 flex items-start gap-2">
-                  <span className="text-lg">⚠️</span>
-                  <span>Cette action est <strong className="font-bold">irréversible</strong> et fermera définitivement le dossier.</span>
-                </p>
-              </div>
-            </div>
+            <h3 className={`text-2xl font-bold ${
+              isFalseAlarm ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {isFalseAlarm ? 'Fausse Alarme' : 'Signalement Authentique'}
+            </h3>
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="bg-gray-50 px-10 py-6 flex items-center justify-end gap-3 border-t border-gray-200">
+        {/* Buttons */}
+        <div className="px-6 pb-6 flex gap-3">
           <button
             onClick={onCancel}
-            className="px-6 py-3 rounded-xl text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all cursor-pointer"
+            className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            Annuler
+            Retour
           </button>
           <button
             onClick={onConfirm}
-            className="px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
+            className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-lg"
           >
-            Confirmer comme fausse alarme
+            Déclarer fausse alarme
           </button>
         </div>
       </div>
